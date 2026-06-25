@@ -132,6 +132,18 @@ Then react autonomously in a **fix loop**: address findings with concrete change
 
 The loop is **fully autonomous, including product and architecture decisions** — it resolves tradeoffs itself rather than waiting. To keep autonomous decisions visible and reversible, record each one where it belongs (an inferred ADR with status "Accepted (inferred)" for architecture choices; an explicit note in the artifact otherwise) and call it out in the PR comment, so the user can override on review.
 
+### Deferred items become classified, tracked issues
+
+Nothing the gate defers is lost: when the fix loop ends, every deferred item of lasting consequence becomes a GitHub issue. Do not lump everything under "technical debt" — classify by type, consistent with the taxonomy this contract already carries (arc42 Chapter 11 separates Risks from Technical Debt; Backlog Management uses User Stories with MoSCoW):
+
+- `tech-debt` — a deliberate shortcut in code or architecture (Cunningham). References the arc42 Chapter 11 Technical-Debt entry and the Chapter 5 building block it burdens.
+- `risk` — a deferred risk. References its R-ID and the arc42 Chapter 11 Risk entry.
+- `adr-needed` — an open architecture or product decision (not debt). Becomes an ADR in the architecture phase.
+- `enhancement` — deferred scope or feature. A User Story with MoSCoW per Backlog Management.
+- `doc-quality` — a non-blocking artifact-quality finding deferred to a later pass.
+
+Each issue links back to its originating ID (finding, R-*, D-*, ADR) and the PR/commit where it was deferred, so traceability holds. Apply a materiality threshold: only items with lasting cost become issues; trivial nits are fixed in the next pass or noted in the PR, to avoid issue noise. Genuine open decisions are `adr-needed`, never `tech-debt`.
+
 ## Docs-as-Code
 
 Documentation follows Docs-as-Code according to Ralf D. Müller:
