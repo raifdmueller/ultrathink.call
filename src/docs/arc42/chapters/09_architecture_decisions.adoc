@@ -116,10 +116,10 @@ port; adapters form an anti-corruption layer.
 | *Sum* | *0* | *+1*
 |===
 
-*Consequences*: chosen for modifiability and testability; the seam is specified
-now but the extraction is deliberately deferred to R2's Mikado first step
-(*tech-debt*, issue #7) to avoid a speculative abstraction (YAGNI). Creates no
-new tracked risk; the deferred extraction is tracked as TD-1 / issue #7.
+*Consequences*: chosen for modifiability and testability. The seam was pulled
+forward and realized in EPIC 1 (issue #7 done, see ADR-7) rather than deferred to
+R2 — the port + adapters now live in `src/app/` and TD-1 is resolved. Creates no
+new tracked risk.
 
 === ADR-6 Static host: GitHub Pages as interim, not sovereign
 

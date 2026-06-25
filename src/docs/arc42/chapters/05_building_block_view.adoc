@@ -3,9 +3,9 @@
 === Level 1 — Whitebox ultrathink.call
 
 The static app decomposes into six building blocks. The external systems are the
-same set as Chapter 3. At R1 every block lives in the single file `index.html`;
-the source locations name the functions, so the seams are real even before the
-file is split (a split is tracked debt — issue #7).
+same set as Chapter 3. Since EPIC 1 (issue #7, done) the blocks live in separate
+ES modules under `src/app/` — `codec.js`, `peer.js`, `signaling.js`, `main.js` —
+loaded natively without a build; the source-location column names each module.
 
 [plantuml,c4-container,svg]
 ----

@@ -40,7 +40,7 @@ Decided in ADR-2 and ADR-3. Each mitigation names the threats it closes.
 |===
 | Mitigation | Mechanism | Closes
 | M-1 Encrypted media | DTLS-SRTP only, no plaintext fallback; a remote SDP without an `a=fingerprint` is rejected (VR-9). | T-002
-| M-2 Page integrity | Single self-contained file; Content-Security-Policy blocks external scripts and `object/base/frame`. Note: the inline script needs `script-src 'unsafe-inline'`, so against DOM injection (T-010) the real guard is M-3; CSP raises the bar against external-script and framing injection. Hash/nonce CSP, a real HTTP header, SRI, and Trusted Types are deferred (see Deferred). | T-003 (partial), T-010 (with M-3)
+| M-2 Page integrity | Same-origin ES modules, no external/CDN scripts; Content-Security-Policy `script-src 'self'` (no inline since EPIC 1/ADR-7) blocks any injected `<script>` or inline handler, and `object/base/frame` are locked. So CSP now closes the script-injection path of T-010 at its own layer; M-3 stays as defence-in-depth for the data/DOM path. A real HTTP CSP header, `default-src`, SRI, and Trusted Types remain deferred (see Deferred — required before the R3 WASM model). | T-003 (partial), T-010
 | M-3 Input validation | Decode-time rules VR-1..6,8,9 + size caps; the token is parsed as data only, never evaluated or inserted as HTML (BR-8). | T-008, T-010
 | M-4 Capability secrecy | CSPRNG room id (SM-6); the token is the bearer secret. *Advisory only* — no technical access enforcement at R1; the UI warns to share carefully. Expiry/single-use and host-admit are deferred. | T-001, T-007 (advisory)
 | M-5 Sovereign endpoints | The only runtime media-path endpoint is a non-US STUN (TC-2). Closes jurisdiction only, not IP disclosure (T-005b stays open). | T-005a

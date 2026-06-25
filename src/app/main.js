@@ -3,7 +3,6 @@
 // (a map of PeerSessions) arrives in R2 (issue #21).
 import { PeerSession } from "./peer.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash } from "./signaling.js";
-import { decodePayload } from "./codec.js";
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
@@ -181,10 +180,9 @@ async function restoreCamera() {
 
 // --- On load: auto-detect an invite in the URL -----------------------------------
 (function detectInvite() {
-  const token = inviteTokenInHash();
-  if (!token) return;
+  if (!inviteTokenInHash()) return;
   $("incomingIn").value = location.hash;
-  decodePayload(token).then((p) => {
+  parseIncoming(location.hash).then((p) => {
     pendingOffer = p.sdp; roomId = p.room; setRoom();
     if (localStream) show("joinAnswer", true);
     status("Du wurdest eingeladen. Starte Kamera + Mikro, dann „Beitreten & Antwort erzeugen“.");
