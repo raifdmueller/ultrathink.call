@@ -240,7 +240,7 @@ $("createInvite").addEventListener("click", async () => {
     if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
     ensureMesh(true);
     const offer = await mesh.createBootstrapOffer();
-    setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), "ultrathink.call-Einladung");
+    setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
     $("copyInvite").disabled = false; $("mailInvite").disabled = false;
     applyShareChannels("shareInvite", "mailInvite"); // share/mailto controlled by visibility, not disabled
     bootstrapPending = true;
@@ -287,7 +287,7 @@ $("joinAnswer").addEventListener("click", async () => {
   try {
     ensureMesh(false);
     const answer = await mesh.joinWithOffer(pendingOffer);
-    setLink("answerLink", await buildCapabilityUrl("answer", roomId, answer), "ultrathink.call-Antwort");
+    setLink("answerLink", await buildCapabilityUrl("answer", roomId, answer), ANSWER_MSG.linkLabel);
     show("answerLabel", true);
     show("copyAnswer", true); applyShareChannels("shareAnswer", "mailAnswer");
     show("joinAnswer", false);
@@ -302,8 +302,8 @@ $("joinAnswer").addEventListener("click", async () => {
 // Copy works everywhere; native share where the platform has it, else mailto as
 // the desktop fallback (#42). One path is offered, never a dead button. The
 // subject/intro live in one place so the share and mailto wordings cannot drift.
-const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:" };
-const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:" };
+const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:", linkLabel: "ultrathink.call-Einladung" };
+const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:", linkLabel: "ultrathink.call-Antwort" };
 
 function applyShareChannels(shareId, mailId) {
   const native = canNativeShare();
