@@ -147,7 +147,7 @@ sit the slices, each a working increment through all layers.
 |===
 | Release | Content | Deliverables | Status
 | R0 | Walking skeleton: 2 people, copy-paste signaling, screen sharing | D-3, D-1 (partial) | *done* (PR #1)
-| R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | next slice
+| R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | *done*
 | R2 | 4-way mesh; automatic signaling over a sovereign broker; sovereign STUN; adapter seams | D-1, D-9, D-6 | planned
 | R3 | Background blur/replacement, client-side | D-4 | planned
 | R4 | Adaptive bitrate/resolution under CPU/bandwidth pressure | D-7 | planned
@@ -237,6 +237,13 @@ An email magic-link would need a sending and validation service — infrastructu
 holds the link may enter. The room ID is a CSPRNG-generated UUIDv4 (SM-6), so it
 is not guessable or enumerable. No backend, no login. The URL fragment never
 leaves the browser, so it does not land in server logs.
+
+At R1 there is no broker yet, so the capability-URL carries the WebRTC SDP
+itself in the fragment (`#invite=`/`#answer=`): the whole token is the bearer
+secret, and possessing it — not guessing the room id — is what admits a peer.
+Once the R2 broker exists, the `#room=<uuid>` form becomes the lookup key the
+broker matches peers on, and the UUID is the secret. The CSPRNG room id (SM-6)
+applies in both forms.
 
 Distribution stays loosely coupled and infrastructure-free: the host opens the
 call, and the app generates a `mailto:` link (subject plus body carrying the
