@@ -43,9 +43,10 @@ export class MeshSession {
     const session = new PeerSession({
       stream: this.stream,
       iceConfig: this.iceConfig,
-      // Re-assert mute on every fresh track (#37): a peer muted before this link
-      // existed (or before its stream arrived) must still come in silenced.
-      onTrack: (s) => { if (this._mutedIds.has(session._peerId)) session.setRemoteAudioEnabled(false); this.onPeerStream(session._peerId, s); },
+      // Reconcile mute on every fresh track (#37): a peer muted before this link
+      // existed (or before its stream arrived) must come in silenced — and one
+      // unmuted in that window must come in audible. Idempotent in both directions.
+      onTrack: (s) => { session.setRemoteAudioEnabled(!this._mutedIds.has(session._peerId)); this.onPeerStream(session._peerId, s); },
       onState: (st) => {
         this.onStatus(`${session._peerId || "peer"}: ${st}`);
         // "disconnected" is transient and recovers on its own — only tear down on terminal states.
@@ -63,6 +64,7 @@ export class MeshSession {
     if (id && this.peers.has(id)) {
       this.peers.get(id).close();
       this.peers.delete(id);
+      this._mutedIds.delete(id); // don't leave a kicked/dropped peer in the muted set (#37)
       this.onPeerLeave(id);
     }
   }

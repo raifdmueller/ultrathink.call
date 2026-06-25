@@ -102,11 +102,16 @@ test("a late-joining guest inherits the muted state (#37)", async ({ browser }) 
   await bootstrap(host, g2, { first: false }); // p2 joins AFTER the mute
   await tileHasStream(g2, "p1");               // g2 forms its link to p1
 
-  // g2 inherited the muted set: p1's incoming audio is disabled for g2.
-  await expect.poll(() => g2.evaluate(() => {
+  const g2HearsP1 = () => g2.evaluate(() => {
     const a = document.querySelector("#tile-p1 video")?.srcObject?.getAudioTracks()[0];
     return a ? a.enabled : null;
-  }), { timeout: 15000 }).toBe(false);
+  });
+  // g2 inherited the muted set: p1's incoming audio is disabled for g2.
+  await expect.poll(g2HearsP1, { timeout: 15000 }).toBe(false);
+
+  // Unmuting p1 re-enables it for everyone, including the late joiner (idempotent).
+  await host.locator("#tile-p1").getByRole("button", { name: "Laut" }).click();
+  await expect.poll(g2HearsP1, { timeout: 15000 }).toBe(true);
 });
 
 test("background blur is offered only where the platform supports it (#25, fail-closed)", async ({ browser }) => {
