@@ -147,7 +147,7 @@ sit the slices, each a working increment through all layers.
 |===
 | Release | Content | Deliverables | Status
 | R0 | Walking skeleton: 2 people, copy-paste signaling, screen sharing | D-3, D-1 (partial) | *done* (PR #1)
-| R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | next slice
+| R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | *done*
 | R2 | 4-way mesh; automatic signaling over a sovereign broker; sovereign STUN; adapter seams | D-1, D-9, D-6 | planned
 | R3 | Background blur/replacement, client-side | D-4 | planned
 | R4 | Adaptive bitrate/resolution under CPU/bandwidth pressure | D-7 | planned
