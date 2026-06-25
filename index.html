@@ -62,6 +62,12 @@
     details summary { cursor: pointer; color: #9aa3ad; font-size: .82rem; margin-top: .6rem; }
     #status { font-size: .85rem; color: #7fd18b; min-height: 1.1em; margin-bottom: .6rem; }
     .room { font-size: .82rem; color: #9aa3ad; margin: 0 0 .6rem; }
+    .chatlog { height: 160px; overflow-y: auto; background: #0d0f12; border: 1px solid #2b313a;
+      border-radius: 6px; padding: .5rem; font-size: .85rem; margin-bottom: .4rem; }
+    .chatline { margin: .15rem 0; word-break: break-word; }
+    .chatline strong { color: #7fb0ff; }
+    #chatInput { flex: 1; min-width: 180px; background: #0d0f12; color: #cfd4da;
+      border: 1px solid #2b313a; border-radius: 6px; padding: .5rem; font-size: .85rem; }
     .hidden { display: none; }
   </style>
 </head>
@@ -161,6 +167,16 @@
         <label>Mikrofon<select id="micSelect"></select></label>
       </div>
     </details>
+  </section>
+
+  <!-- In-call chat over the data channel (#48) -------------------------------->
+  <section class="card hidden" id="chatPanel">
+    <h2>Chat</h2>
+    <div id="chatLog" class="chatlog" aria-live="polite"></div>
+    <div class="row">
+      <input id="chatInput" type="text" maxlength="2000" placeholder="Nachricht … (Enter zum Senden)" />
+      <button id="chatSend">Senden</button>
+    </div>
   </section>
 
   <script type="module" src="src/app/main.js"></script>

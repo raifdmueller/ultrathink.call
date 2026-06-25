@@ -11,6 +11,7 @@
 import { PeerSession } from "./peer.js";
 
 export const MAX_PEERS = 8; // ceiling on simultaneous connections (anti-DoS)
+export const MAX_CHAT = 2000; // cap a chat line (#48); the ctrl channel caps the whole frame
 
 // Reject any remote description that is not a well-formed, DTLS-encrypted SDP of
 // the expected kind — the mesh path's equivalent of the capability-URL's VR-9.
@@ -19,7 +20,7 @@ function validRemoteSdp(sdp, kind) {
 }
 
 export class MeshSession {
-  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, onKicked, iceConfig }) {
+  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, onKicked, onChat, iceConfig }) {
     this.stream = stream;
     this.isHost = isHost;
     this.iceConfig = iceConfig;
@@ -27,6 +28,7 @@ export class MeshSession {
     this.onPeerLeave = onPeerLeave || (() => {});
     this.onStatus = onStatus || (() => {});
     this.onKicked = onKicked || (() => {}); // guest: the host evicted us
+    this.onChat = onChat || (() => {});     // a chat line arrived (#48)
     this.selfId = isHost ? "host" : null;
     this.peers = new Map();           // peerId -> PeerSession
     this._pendingHostSession = null;  // host: bootstrap session awaiting an answer
@@ -127,8 +129,26 @@ export class MeshSession {
     this.peers.get(id)?.setRemoteAudioEnabled(!muted); // apply at the host too
   }
 
+  // --- Chat (#48): direct peer-to-peer over the established mesh, no relay ----
+  // Broadcast to every directly-connected peer. Returns the capped text the
+  // sender displays for itself.
+  sendChat(text) {
+    const t = String(text).slice(0, MAX_CHAT);
+    if (t) for (const s of this.peers.values()) s.sendCtrl({ t: "chat", text: t });
+    return t;
+  }
+
   _handleCtrl(session, msg) {
     if (!msg || typeof msg.t !== "string") return;
+
+    // Chat is handled by both roles. Attribute it to the channel it arrived on
+    // (session._peerId), never a claimed `from` — a peer cannot impersonate.
+    if (msg.t === "chat") {
+      if (typeof msg.text === "string" && msg.text.length <= MAX_CHAT) {
+        this.onChat(session._peerId || "peer", msg.text);
+      }
+      return;
+    }
 
     if (this.isHost) {
       // Conduit only. The authoritative sender is the channel it arrived on —
