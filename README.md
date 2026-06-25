@@ -40,6 +40,12 @@ Keine Dependencies, kein Build. `index.html` öffnen reicht.
 
 ## Hosting
 
-Rein statisch. Für GitLab Pages eine `.gitlab-ci.yml` mit `pages`-Job ergänzen,
-der `index.html` als Artefakt veröffentlicht. WebRTC braucht einen sicheren
-Kontext — Pages liefert HTTPS, also passt das.
+Rein statisch, HTTPS inklusive (WebRTC braucht einen sicheren Kontext).
+
+**GitLab Pages**: Die `.gitlab-ci.yml` ist dabei. Der `pages`-Job kopiert
+`index.html` nach `public/` und veröffentlicht es — er läuft nur auf dem
+Default-Branch. Nach dem ersten Pipeline-Lauf liegt die Seite unter
+`https://<user>.gitlab.io/<projekt>/`.
+
+**GitHub Pages**: Im Repo unter Settings → Pages den Branch als Quelle wählen;
+`index.html` liegt im Root, kein Build nötig.
