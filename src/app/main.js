@@ -13,6 +13,7 @@ let localStream = null;
 let camTrack = null;
 let pendingOffer = null;       // guest: the host's offer awaiting join
 let bootstrapPending = false;  // host: an invite is out, awaiting its answer
+let sharing = false;           // a screen share is active
 let roomId = null;
 
 const setRoom = () => { if (roomId) $("roomLine").textContent = "Raum: " + roomId; };
@@ -59,8 +60,8 @@ $("startCam").addEventListener("click", async () => {
     camTrack = localStream.getVideoTracks()[0] || null;
     $("startCam").disabled = true;
     // Screen sharing exists only in desktop browsers (not iOS/Android) — #34.
-    $("shareScreen").disabled = !navigator.mediaDevices.getDisplayMedia;
-    if (!navigator.mediaDevices.getDisplayMedia) $("shareScreen").title = "Auf diesem Browser/Gerät nicht verfügbar (z. B. mobil).";
+    $("shareScreen").disabled = !navigator.mediaDevices?.getDisplayMedia;
+    if (!navigator.mediaDevices?.getDisplayMedia) $("shareScreen").title = "Auf diesem Browser/Gerät nicht verfügbar (z. B. mobil).";
     $("createInvite").disabled = false;
     if (pendingOffer) show("joinAnswer", true);
     await populateDevices();
@@ -98,7 +99,10 @@ async function switchTrack(kind, deviceId) {
       : { audio: { deviceId: { exact: deviceId } } });
     const track = (kind === "video" ? stream.getVideoTracks() : stream.getAudioTracks())[0];
     for (const s of (mesh ? mesh.peers.values() : [])) {
-      if (kind === "video") await s.replaceVideo(track); else await s.replaceAudio(track);
+      // While sharing, keep the screen on the peers' senders; the new camera
+      // track is restored when the share ends.
+      if (kind === "video") { if (!sharing) await s.replaceVideo(track); }
+      else await s.replaceAudio(track);
     }
     const old = (kind === "video" ? localStream.getVideoTracks() : localStream.getAudioTracks())[0];
     if (old) { localStream.removeTrack(old); old.stop(); }
@@ -191,7 +195,7 @@ $("mailAnswer").addEventListener("click", () => {
 
 // --- Screen sharing (applies to every peer) --------------------------------------
 $("shareScreen").addEventListener("click", async () => {
-  if (!navigator.mediaDevices.getDisplayMedia) {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
     status("Bildschirm teilen wird auf diesem Browser/Gerät nicht unterstützt (z. B. mobil).");
     return;
   }
@@ -199,6 +203,7 @@ $("shareScreen").addEventListener("click", async () => {
     const display = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
     const screenTrack = display.getVideoTracks()[0];
     for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
+    sharing = true;
     $("localVideo").srcObject = display;
     show("deviceRow", false);
     $("shareScreen").disabled = true; $("stopShare").disabled = false;
@@ -210,6 +215,7 @@ $("shareScreen").addEventListener("click", async () => {
 });
 $("stopShare").addEventListener("click", restoreCamera);
 async function restoreCamera() {
+  sharing = false;
   camTrack = localStream.getVideoTracks()[0] || camTrack;
   for (const s of (mesh ? mesh.peers.values() : [])) if (camTrack) await s.replaceVideo(camTrack);
   $("localVideo").srcObject = localStream;

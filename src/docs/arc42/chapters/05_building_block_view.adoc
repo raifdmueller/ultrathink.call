@@ -51,7 +51,7 @@ Rel(sig, mail, "invite draft", "mailto:")
 |===
 | Block | Responsibility | Interface | Source location
 | BB-1 UI Shell | Present controls, video tiles, status; wire DOM events to the other blocks. | DOM events; `status()` text. | `index.html` (markup); `src/app/main.js` (event wiring)
-| BB-2 Media Manager | Capture camera/mic, enumerate and switch devices, screen share, restore camera. | `getUserMedia`, `enumerateDevices`, `replaceTrack`. | `src/app/main.js`: `populateDevices`, `switchDevices`, `restoreCamera` + `#startCam`/`#shareScreen` handlers
+| BB-2 Media Manager | Capture camera/mic, enumerate and switch devices (per kind), screen share (feature-detected), restore camera. | `getUserMedia`, `enumerateDevices`, `replaceTrack`. | `src/app/main.js`: `populateDevices`, `switchTrack`, `restoreCamera` + `#startCam`/`#shareScreen` handlers
 | BB-3 Peer Connection | Own the `RTCPeerConnection`: tracks, offer/answer, ICE (non-trickle, timeout-bounded), and a `ctrl` data channel used by the mesh. | `PeerSession` class; `waitForIce`; `sendCtrl`. | `src/app/peer.js`
 | BB-4 Signaling Transport (port) | Produce and consume capability tokens; the one adapter is capability-URL + `mailto:` + clipboard (no broker, ADR-8). | `buildCapabilityUrl`, `parseIncoming`, `mailtoLink`, `inviteTokenInHash`. | `src/app/signaling.js`; `src/app/main.js` (DOM glue) — see ADR-5
 | BB-5 Token Codec | Compress and encode the SDP payload to a URL-safe token and back. | `encodePayload`, `decodePayload`, `extractToken`. | `src/app/codec.js` (pure, unit-tested)
