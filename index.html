@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ultrathink.call — Walking Skeleton</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0; padding: 1rem;
+      background: #14161a; color: #e6e8eb;
+    }
+    h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+    p.lead { margin: 0 0 1rem; color: #9aa3ad; font-size: .9rem; }
+    .videos {
+      display: grid; gap: .75rem; margin-bottom: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .tile { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; }
+    .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tile span { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(0,0,0,.6); font-size: .75rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    button {
+      background: #2d6cdf; color: #fff; border: 0; border-radius: 6px;
+      padding: .55rem .9rem; font-size: .9rem; cursor: pointer;
+    }
+    button.secondary { background: #2b313a; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .exchange { display: grid; gap: .75rem; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 700px) { .exchange { grid-template-columns: 1fr; } }
+    fieldset { border: 1px solid #2b313a; border-radius: 8px; padding: .75rem; }
+    legend { padding: 0 .4rem; color: #9aa3ad; font-size: .8rem; }
+    textarea { width: 100%; min-height: 120px; resize: vertical;
+      background: #0d0f12; color: #cfd4da; border: 1px solid #2b313a; border-radius: 6px;
+      padding: .5rem; font-family: ui-monospace, monospace; font-size: .75rem; }
+    label.step { display: block; font-size: .8rem; margin: 0 0 .3rem; color: #cfd4da; }
+    .hint { font-size: .78rem; color: #9aa3ad; margin: .35rem 0 0; }
+    #status { font-size: .8rem; color: #7fd18b; min-height: 1.1em; }
+    .role-pick { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>ultrathink.call — Walking Skeleton</h1>
+  <p class="lead">
+    P2P-Videocall für 2 Personen, ohne eigenen Server. Signaling per Copy-Paste,
+    öffentlicher STUN, kein TURN. Erster vertikaler Slice: Kamera → SDP-Austausch → Remote-Video + Screensharing.
+  </p>
+
+  <div class="videos">
+    <div class="tile"><video id="localVideo" autoplay playsinline muted></video><span>Du (lokal)</span></div>
+    <div class="tile"><video id="remoteVideo" autoplay playsinline></video><span>Gegenüber</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="startCam">1 · Kamera + Mikro starten</button>
+    <button id="shareScreen" class="secondary" disabled>Bildschirm teilen</button>
+    <button id="stopShare" class="secondary" disabled>Teilen beenden</button>
+  </div>
+
+  <div id="status">Bereit. Schritt 1: Kamera starten.</div>
+
+  <h2 style="font-size:1rem;margin:1.2rem 0 .5rem;">2 · Rolle wählen</h2>
+  <div class="role-pick">
+    <button id="beCaller">Anruf starten (Caller)</button>
+    <button id="beCallee" class="secondary">Anruf beitreten (Callee)</button>
+  </div>
+
+  <div class="exchange">
+    <fieldset>
+      <legend>Caller</legend>
+      <label class="step">A · Offer erzeugen und an den Callee schicken</label>
+      <textarea id="localOffer" readonly placeholder="Offer erscheint hier — kopieren und dem Callee senden."></textarea>
+      <button id="copyOffer" class="secondary" disabled>Offer kopieren</button>
+      <label class="step" style="margin-top:.6rem;">D · Answer vom Callee einfügen und verbinden</label>
+      <textarea id="remoteAnswer" placeholder="Answer vom Callee hier einfügen."></textarea>
+      <button id="applyAnswer" class="secondary" disabled>Answer übernehmen</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Callee</legend>
+      <label class="step">B · Offer vom Caller einfügen</label>
+      <textarea id="remoteOffer" placeholder="Offer vom Caller hier einfügen."></textarea>
+      <button id="makeAnswer" class="secondary" disabled>Answer erzeugen</button>
+      <label class="step" style="margin-top:.6rem;">C · Answer kopieren und an den Caller zurückschicken</label>
+      <textarea id="localAnswer" readonly placeholder="Answer erscheint hier — kopieren und dem Caller senden."></textarea>
+      <button id="copyAnswer" class="secondary" disabled>Answer kopieren</button>
+    </fieldset>
+  </div>
+
+  <p class="hint">
+    Ablauf: Caller → A (Offer) → Callee → B (einfügen) → Callee → C (Answer zurück) → Caller → D (übernehmen). Fertig.
+  </p>
+
+  <script>
+    // --- Walking Skeleton: manual copy-paste signaling, 2 peers, no server. ---
+    // Public STUN only; no TURN (accepted limitation: symmetric NAT may fail).
+    const ICE_CONFIG = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+      ],
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const status = (msg) => { $("status").textContent = msg; };
+
+    let pc = null;          // the single RTCPeerConnection (mesh comes later)
+    let localStream = null; // camera + mic
+    let camTrack = null;    // original video track, kept to restore after screenshare
+    let videoSender = null; // RTCRtpSender for the outgoing video track
+
+    // Non-trickle ICE: resolve once gathering is complete, so one SDP blob
+    // carries every candidate and a single copy-paste suffices.
+    function waitForIceGathering(peer) {
+      return new Promise((resolve) => {
+        if (peer.iceGatheringState === "complete") return resolve();
+        const check = () => {
+          if (peer.iceGatheringState === "complete") {
+            peer.removeEventListener("icegatheringstatechange", check);
+            resolve();
+          }
+        };
+        peer.addEventListener("icegatheringstatechange", check);
+      });
+    }
+
+    function newPeerConnection() {
+      const peer = new RTCPeerConnection(ICE_CONFIG);
+      peer.addEventListener("track", (e) => {
+        $("remoteVideo").srcObject = e.streams[0];
+      });
+      peer.addEventListener("connectionstatechange", () => {
+        status("Verbindung: " + peer.connectionState);
+      });
+      // Attach local media so it is offered to the remote peer.
+      for (const track of localStream.getTracks()) {
+        const sender = peer.addTrack(track, localStream);
+        if (track.kind === "video") { videoSender = sender; camTrack = track; }
+      }
+      return peer;
+    }
+
+    // --- Step 1: local media ---
+    $("startCam").addEventListener("click", async () => {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        $("localVideo").srcObject = localStream;
+        $("startCam").disabled = true;
+        $("shareScreen").disabled = false;
+        $("beCaller").disabled = false;
+        $("beCallee").disabled = false;
+        status("Kamera läuft. Schritt 2: Rolle wählen.");
+      } catch (err) {
+        status("Kamera/Mikro-Zugriff fehlgeschlagen: " + err.message);
+      }
+    });
+
+    // --- Caller: create offer ---
+    $("beCaller").addEventListener("click", async () => {
+      pc = newPeerConnection();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc);
+      $("localOffer").value = JSON.stringify(pc.localDescription);
+      $("copyOffer").disabled = false;
+      $("applyAnswer").disabled = false;
+      status("Offer erzeugt. Schritt A: kopieren und dem Callee senden.");
+    });
+
+    $("applyAnswer").addEventListener("click", async () => {
+      try {
+        const answer = JSON.parse($("remoteAnswer").value);
+        await pc.setRemoteDescription(answer);
+        status("Answer übernommen — Verbindung wird aufgebaut …");
+      } catch (err) {
+        status("Answer ungültig: " + err.message);
+      }
+    });
+
+    // --- Callee: consume offer, create answer ---
+    $("beCallee").addEventListener("click", () => {
+      $("makeAnswer").disabled = false;
+      status("Schritt B: Offer vom Caller einfügen, dann Answer erzeugen.");
+    });
+
+    $("makeAnswer").addEventListener("click", async () => {
+      try {
+        pc = newPeerConnection();
+        const offer = JSON.parse($("remoteOffer").value);
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await waitForIceGathering(pc);
+        $("localAnswer").value = JSON.stringify(pc.localDescription);
+        $("copyAnswer").disabled = false;
+        status("Answer erzeugt. Schritt C: kopieren und dem Caller zurückschicken.");
+      } catch (err) {
+        status("Offer ungültig: " + err.message);
+      }
+    });
+
+    // --- Clipboard helpers ---
+    const copyFrom = (id) => navigator.clipboard.writeText($(id).value);
+    $("copyOffer").addEventListener("click", () => copyFrom("localOffer"));
+    $("copyAnswer").addEventListener("click", () => copyFrom("localAnswer"));
+
+    // --- Screensharing: swap the outgoing video track, no renegotiation needed ---
+    $("shareScreen").addEventListener("click", async () => {
+      try {
+        const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = display.getVideoTracks()[0];
+        if (videoSender) await videoSender.replaceTrack(screenTrack);
+        $("localVideo").srcObject = display;
+        $("shareScreen").disabled = true;
+        $("stopShare").disabled = false;
+        status("Bildschirm wird geteilt.");
+        // When the user stops sharing via the browser UI, restore the camera.
+        screenTrack.addEventListener("ended", restoreCamera);
+      } catch (err) {
+        status("Screensharing abgebrochen: " + err.message);
+      }
+    });
+
+    $("stopShare").addEventListener("click", restoreCamera);
+
+    async function restoreCamera() {
+      if (videoSender && camTrack) await videoSender.replaceTrack(camTrack);
+      $("localVideo").srcObject = localStream;
+      $("shareScreen").disabled = false;
+      $("stopShare").disabled = true;
+      status("Zurück auf Kamera.");
+    }
+  </script>
+</body>
+</html>
