@@ -38,8 +38,12 @@ export class PeerSession {
     this.ctrl = null;
     this._ctrlQueue = [];
     this._onCtrl = onCtrl;
+    this.remoteStream = null;
 
-    this.pc.addEventListener("track", (e) => onTrack && onTrack(e.streams[0]));
+    this.pc.addEventListener("track", (e) => {
+      this.remoteStream = e.streams[0];
+      onTrack && onTrack(e.streams[0]);
+    });
     this.pc.addEventListener("connectionstatechange", () => onState && onState(this.pc.connectionState));
 
     if (isOfferer) {
@@ -100,6 +104,9 @@ export class PeerSession {
 
   async replaceVideo(track) { if (this.videoSender) await this.videoSender.replaceTrack(track); }
   async replaceAudio(track) { if (this.audioSender) await this.audioSender.replaceTrack(track); }
+
+  // Receiver-side mute: disable the incoming audio from this peer for us.
+  setRemoteAudioEnabled(on) { this.remoteStream?.getAudioTracks().forEach((t) => { t.enabled = on; }); }
 
   get state() { return this.pc.connectionState; }
   close() { this.pc.close(); }

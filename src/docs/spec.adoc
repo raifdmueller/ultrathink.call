@@ -38,7 +38,7 @@ guest↔guest signaling; the use cases below describe the host/guest pair and ap
 per peer. The ~20 training topology (D-5/R5) extends this and remains open
 (ADR-4).
 
-== Eight rules govern access, encryption, and sovereignty
+== Ten rules govern access, encryption, sovereignty, and moderation
 
 [cols="1,4",options="header"]
 |===
@@ -51,9 +51,11 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 | BR-6 | Each pair of participants holds at most one peer connection. The host bootstraps one connection per guest (capability-URL) and relays guest↔guest signaling so a full mesh forms (ADR-8, no broker); a duplicate connection to an existing peer is not created.
 | BR-7 | An incoming token is acted on only after it passes every validation rule; an invalid token yields a message and no state change.
 | BR-8 | Untrusted token text is treated as data only — never evaluated, never inserted as HTML — and enters the System solely through SYS-UC-2.
+| BR-9 | Only the Host may moderate (kick or mute a peer). Moderation commands travel over the Host's `ctrl` channels; a Guest acts on a `kick`/`mute` only when it arrives from the Host session, never from a relayed peer (M-8, closes T-009).
+| BR-10 | An invite token may carry an expiry (`exp`, epoch ms); the System sets a default 60-minute TTL. A token whose `exp` has passed is refused on load with a message and no state change (M-9). Expiry bounds replay; it is not single-use.
 |===
 
-== Four use cases cover hosting, joining, devices, and sharing
+== Five use cases cover hosting, joining, devices, sharing, and moderation
 
 === UC-1 Host a call
 
@@ -135,6 +137,24 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 .Extensions
 * 1a. Actor cancels the picker → no change; System reports the cancellation.
 
+=== UC-5 Moderate a call
+
+* *Primary actor*: Host
+* *Goal*: Remove or silence a disruptive participant, since there is no admit gate.
+* *Trigger*: A participant disrupts the call (gate-crasher or noisy peer).
+* *Preconditions*: The actor is the Host; the target peer is connected.
+* *Postconditions*: The kicked peer is dropped for everyone; or the muted peer's audio is silenced for everyone.
+
+.Main success scenario
+. Host clicks *Entfernen* (kick) or *Stumm* (mute) on the target peer's tile.
+. System sends the moderation command over the Host's `ctrl` channels to every peer (BR-9).
+. On kick: the Host drops the peer and each remaining Guest drops it too; the tile disappears everywhere.
+. On mute: every peer disables the target's incoming audio (receiver-side); the Host can unmute the same way.
+
+.Extensions
+* 1a. A Guest tries to issue a moderation command → ignored: only the Host's session is authoritative (BR-9).
+* 2a. A relayed peer forges a `kick`/`mute` not from the Host → ignored (BR-9).
+
 == Each interface has a system use case
 
 === SYS-UC-1 Produce an invite token
@@ -147,7 +167,7 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 === SYS-UC-2 Consume an incoming capability token
 
 * *Input*: free text — a full URL (`#invite=`/`#answer=`) or a bare token. This is the System's untrusted-input trust boundary (BR-8).
-* *Validation* (decode-time, all must hold, else reject — BR-7): VR-1, VR-2, VR-8, VR-3, VR-4, VR-5, VR-6, VR-9 (see Validation Rules). The connection guard GD-1 is applied after decode.
+* *Validation* (decode-time, all must hold, else reject — BR-7): VR-1, VR-2, VR-8, VR-3, VR-4, VR-5, VR-6, VR-9, VR-10 (see Validation Rules). The connection guard GD-1 is applied after decode.
 * *Processing*: on `offer` (and GD-1 satisfied) → store as pending, show room id, offer "join"; on `answer` → apply to the waiting connection.
 * *Output / status*: a status message; for `offer`, the join action becomes available; for `answer`, the connection proceeds to `connecting`.
 * *Error responses*: any failed rule → a human-readable status message; no state change.
@@ -172,6 +192,13 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 * *Processing*: URL-encode subject and body (intro + capability-URL), then navigate to `mailto:?subject=…&body=…` (IC-3). The System never sends the mail (BR-4).
 * *Output*: a pre-filled draft in the actor's own mail client.
 * *Errors*: no configured mail client → the OS/browser handles it; the copy action is the fallback.
+
+=== SYS-UC-6 Issue a moderation command
+
+* *Input*: the Host's kick/mute action on a peer id; the Host role (BR-9).
+* *Processing*: send `{t:"kick", id}` or `{t:"mute", id, muted}` over every `ctrl` channel; apply locally (drop the peer, or disable its incoming audio). A Guest acts on a received command only when it arrives from the Host session.
+* *Output / status*: the peer is dropped for all peers (kick) or its audio is silenced for all peers (mute); the tile/control updates.
+* *Error responses*: a non-Host caller is a no-op; a `kick`/`mute` not from the Host session is ignored (BR-9).
 
 == The connect flow has more failure paths than the happy path
 
@@ -361,6 +388,9 @@ Scenario: No US endpoint in the runtime path
 | EARS-10 | When a peer connects, the system shall disclose the local public IP to the remote peer and the STUN server; IP-hiding via TURN is out of R1 scope. (R-6)
 | EARS-11 | The system shall serve no external scripts and shall ship a Content-Security-Policy restricting script, base, object, and frame sources. (R-10)
 | EARS-12 | The system shall not issue runtime network requests to any origin other than the page origin and the STUN allowlist. (G-9, SM-8)
+| EARS-13 | When the host kicks a peer, the system shall drop that peer at the host and relay the eviction to the remaining guests, removing it from the mesh. (BR-9, UC-5)
+| EARS-14 | When a guest receives a kick or mute, the system shall act on it only if it arrived from the host session, and otherwise shall ignore it. (BR-9, UC-5)
+| EARS-15 | When the host requests an invite, the system shall stamp a 60-minute expiry; and when loading a token whose expiry has passed, the system shall refuse it with a message and no state change. (BR-10, VR-10)
 |===
 
 == Entities, states, and contracts complete the picture
@@ -468,6 +498,7 @@ Decode-time rules (SYS-UC-2; reject if violated):
 | VR-5 | `room` matches the UUIDv4 pattern (version/variant nibbles). | BR-2, SM-6
 | VR-6 | `sdp.type === kind` and `sdp.sdp` is a string. | IC-2
 | VR-9 | `sdp.sdp` contains an `a=fingerprint` line (DTLS-SRTP negotiated). | G-8, SM-7, BR-3
+| VR-10 | If the payload carries an `exp`, it is in the future (evaluated at load, not in the pure codec). | BR-10, T-007
 |===
 
 Processing guard (post-decode, enforced by the handler, not the codec):
@@ -483,14 +514,16 @@ not authorization.
 [cols="1,3",options="header"]
 |===
 | Spec element | Sources / targets
-| UC-1..UC-4 | PRD deliverables D-1 (2-peer slice only), D-2, D-3, D-8
-| SYS-UC-1..5 | Interface contracts IC-1..IC-3; validation VR-*, guard GD-1
+| UC-1..UC-5 | PRD deliverables D-1 (2-peer slice only), D-2, D-3, D-8; UC-5 closes T-009 (moderation)
+| SYS-UC-1..6 | Interface contracts IC-1..IC-3; validation VR-*, guard GD-1; SYS-UC-6 moderation
 | Acceptance criteria | Success criteria SM-2 (R2), SM-5, SM-6, SM-7, SM-8
-| BR-1..BR-8 | PRD goals G-1, G-3, G-6, G-8, G-9
+| BR-1..BR-10 | PRD goals G-1, G-3, G-6, G-8, G-9; BR-9/BR-10 moderation + expiry
 | VR-1, VR-8 | PRD risk R-3 / DoS
 | VR-9, EARS-5 | PRD goal G-8 (encryption enforced, not assumed)
+| VR-10, EARS-15 | arc42 M-9 invite expiry (R-3 replay window bounded)
+| EARS-13, EARS-14 | arc42 M-8 host moderation (T-009 / R-9)
 | EARS-10 | PRD risk R-6 (IP/metadata disclosure — disclosed, mitigation TURN deferred)
 | EARS-11, R-10 acceptance | PRD risk R-10 (supply chain) — CSP shipped; SRI/Trusted Types are later hardening
-| Deferred to arc42 threat model (8.1) | R-3 replay/revocation (no single-use/expiry at R1), R-8 full pre-share UI, SDP content/ICE-candidate constraints
+| Deferred to arc42 threat model (8.1) | R-3 single-use token revocation (expiry now bounds replay, M-9), R-8 full pre-share UI, SDP content/ICE-candidate constraints
 | Open: mesh (UC for 3..4), training topology | PRD R-1, issue #3; broker signaling, issue #7
 |===

@@ -22,7 +22,7 @@ register (Chapter 11). Decided context: ADR-1 (server-less P2P), ADR-2
 | T-006 | Information Disclosure | Whole-screen sharing leaks other windows/notifications. | R-8
 | T-007 | Information Disclosure | The capability token leaks via email storage, clipboard residency, or browser history. | R-3
 | T-008 | Denial of Service | An oversized or gzip-bomb token exhausts client memory on decode. | closed by M-3
-| T-009 | Denial of Service | A gate-crasher disrupts a session; there is no host admit/kick/mute. | R-9
+| T-009 | Denial of Service | A gate-crasher disrupts a session. | closed by M-8 (host kick/mute), R-9 residual
 | T-010 | Elevation of Privilege | A crafted token tries to inject script/markup into the DOM. | closed by M-2, M-3
 | T-011 | Information Disclosure | The fragment token leaks via the HTTP `Referer` header or `window.opener` when a link is followed. | closed by M-7
 |===
@@ -48,11 +48,13 @@ Decided in ADR-2 and ADR-3. Each mitigation names the threats it closes.
 | M-1 Encrypted media | DTLS-SRTP only, no plaintext fallback; a remote SDP without an `a=fingerprint` is rejected (VR-9). | T-002
 | M-2 Page integrity | Same-origin ES modules, no external/CDN scripts; Content-Security-Policy `script-src 'self'` (no inline since EPIC 1/ADR-7) blocks any injected `<script>` or inline handler, and `object/base/frame` are locked. So CSP now closes the script-injection path of T-010 at its own layer; M-3 stays as defence-in-depth for the data/DOM path. A real HTTP CSP header, `default-src`, SRI, and Trusted Types remain deferred (see Deferred — required before the R3 WASM model). | T-003 (partial), T-010
 | M-3 Input validation | Decode-time rules VR-1..6,8,9 + size caps; the token is parsed as data only, never evaluated or inserted as HTML (BR-8). | T-008, T-010
-| M-4 Capability secrecy | CSPRNG room id (SM-6); the token is the bearer secret. *Advisory only* — no technical access enforcement at R1; the UI warns to share carefully. Expiry/single-use and host-admit are deferred. | T-001, T-007 (advisory)
+| M-4 Capability secrecy | CSPRNG room id (SM-6); the token is the bearer secret. *Advisory only* — no technical access enforcement; the UI warns to share carefully. Single-use revocation stays deferred. | T-001, T-007 (advisory)
 | M-5 Sovereign endpoints | The only runtime media-path endpoint is a non-US STUN (TC-2). Closes jurisdiction only, not IP disclosure (T-005b stays open). | T-005a
 | M-6 Oversharing guard | Screen share prefers a single window and warns before sharing. | T-006
 | M-7 Referrer hardening | `<meta name="referrer" content="no-referrer">` so the fragment token never leaks via `Referer`; external links (when added) carry `rel="noopener noreferrer"`. | T-011
-| Deferred | TURN relay (hide IP, T-005b), host admit/moderation (T-001/T-009), single-use/expiring tokens (T-007), SRI + Trusted Types + hash/nonce CSP (T-003/T-010 — required before the R3 WASM blur model ships). | issues #4, #7; threat-model backlog
+| M-8 Host moderation | Only the host may `kick`/`mute` a peer (#28). Commands flow over the host's `ctrl` channels; a guest honours kick/mute *only* from the host session (not a relayed peer), so moderation cannot be spoofed. Kick drops the peer and relays the eviction to the remaining guests; mute is receiver-side (each peer disables the muted peer's incoming audio). | T-009
+| M-9 Invite expiry | The capability token carries an optional `exp` (epoch ms); invites default to a 60-minute TTL (#29). An expired invite is refused on load, so a stale forwarded link cannot be replayed indefinitely. Time-bounded, not single-use — a link is still reusable within its window. | T-001, T-007 (partial)
+| Deferred | TURN relay (hide IP, T-005b), single-use token revocation (T-007), SRI + Trusted Types + hash/nonce CSP (T-003/T-010 — required before the R3 WASM blur model ships). | issues #4; threat-model backlog
 |===
 
 NOTE: M-2 covers R0–R2 only. At R3 the background-blur WASM model is a fetched

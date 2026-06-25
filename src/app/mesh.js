@@ -19,13 +19,14 @@ function validRemoteSdp(sdp, kind) {
 }
 
 export class MeshSession {
-  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, iceConfig }) {
+  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, onKicked, iceConfig }) {
     this.stream = stream;
     this.isHost = isHost;
     this.iceConfig = iceConfig;
     this.onPeerStream = onPeerStream || (() => {});
     this.onPeerLeave = onPeerLeave || (() => {});
     this.onStatus = onStatus || (() => {});
+    this.onKicked = onKicked || (() => {}); // guest: the host evicted us
     this.selfId = isHost ? "host" : null;
     this.peers = new Map();           // peerId -> PeerSession
     this._pendingHostSession = null;  // host: bootstrap session awaiting an answer
@@ -113,8 +114,21 @@ export class MeshSession {
 
   // Control protocol: `welcome` (host→new guest: your id + peers to connect to)
   // and `signal` (offer/answer, relayed by the host, routed by `to`).
+  // --- Host moderation (only the host may issue these) -----------------------
+  kick(id) {
+    if (!this.isHost) return;
+    for (const s of this.peers.values()) s.sendCtrl({ t: "kick", id });
+    this._drop(id);
+  }
+
+  setMuted(id, muted) {
+    if (!this.isHost) return;
+    for (const s of this.peers.values()) s.sendCtrl({ t: "mute", id, muted });
+    this.peers.get(id)?.setRemoteAudioEnabled(!muted); // apply at the host too
+  }
+
   _handleCtrl(session, msg) {
-    if (!msg || (msg.t !== "welcome" && msg.t !== "signal")) return;
+    if (!msg || typeof msg.t !== "string") return;
 
     if (this.isHost) {
       // Conduit only. The authoritative sender is the channel it arrived on —
@@ -122,6 +136,21 @@ export class MeshSession {
       if (msg.t === "signal" && typeof msg.to === "string" && msg.to !== "host") {
         const target = this.peers.get(msg.to);
         if (target) target.sendCtrl({ ...msg, from: session._peerId });
+      }
+      return;
+    }
+
+    // Guest: moderation is honored only from the host channel.
+    if ((msg.t === "kick" || msg.t === "mute") && session === this._hostSession && typeof msg.id === "string") {
+      if (msg.t === "kick") {
+        // The host can kick us (our own selfId) or another guest. If it is us,
+        // tear the whole mesh down — otherwise the kicked client keeps every
+        // PeerConnection open and goes on sending media to peers that haven't
+        // yet noticed (its own peers map never holds its own selfId).
+        if (msg.id === this.selfId) { this.onKicked(); this.close(); }
+        else this._drop(msg.id);
+      } else {
+        this.peers.get(msg.id)?.setRemoteAudioEnabled(!msg.muted);
       }
       return;
     }
