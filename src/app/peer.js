@@ -105,6 +105,35 @@ export class PeerSession {
   async replaceVideo(track) { if (this.videoSender) await this.videoSender.replaceTrack(track); }
   async replaceAudio(track) { if (this.audioSender) await this.audioSender.replaceTrack(track); }
 
+  // Outbound video health for the adaptive controller (#27, BB-8). Returns the
+  // browser's own quality-limitation verdict ("cpu" | "bandwidth" | "none") and
+  // the current send framerate, or null if there is no video sender yet.
+  async videoLimitation() {
+    if (!this.videoSender) return null;
+    const stats = await this.pc.getStats(this.videoSender.track);
+    let reason = "none", fps = null;
+    stats.forEach((r) => {
+      if (r.type === "outbound-rtp" && r.kind === "video") {
+        // Prefer a limiting verdict; under simulcast keep the worst, not the last.
+        if (r.qualityLimitationReason && r.qualityLimitationReason !== "none") reason = r.qualityLimitationReason;
+        if (typeof r.framesPerSecond === "number") fps = fps === null ? r.framesPerSecond : Math.min(fps, r.framesPerSecond);
+      }
+    });
+    return { reason, fps };
+  }
+
+  // Apply an encoding tier to the outgoing video (#27): scale the resolution and
+  // cap the framerate via setParameters — the standard adaptive lever, applied to
+  // the same local track every peer receives.
+  async applyVideoParams({ scaleResolutionDownBy, maxFramerate }) {
+    if (!this.videoSender) return;
+    const params = this.videoSender.getParameters();
+    if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+    params.encodings[0].scaleResolutionDownBy = scaleResolutionDownBy;
+    params.encodings[0].maxFramerate = maxFramerate;
+    await this.videoSender.setParameters(params);
+  }
+
   // Receiver-side mute: disable the incoming audio from this peer for us.
   setRemoteAudioEnabled(on) { this.remoteStream?.getAudioTracks().forEach((t) => { t.enabled = on; }); }
 

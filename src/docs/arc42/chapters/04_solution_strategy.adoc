@@ -11,7 +11,7 @@ Chapter 1.2 maps to a named approach here.
 | S-1 | Server-less P2P | A static page plus browser WebRTC; peers connect directly, no media server. No backend to run (decided in ADR-1). | QG-1, QG-2
 | S-2 | Sovereign-by-construction endpoints | The only runtime endpoint is a non-US STUN server (Nextcloud, DE); the page is served over HTTPS; no third-party scripts (ADR-3). | QG-1
 | S-3 | Capability-URL signaling | The SDP is carried in the URL fragment and distributed via the host's own `mailto:`; the token is the bearer secret. No login, no signaling backend (ADR-2). | QG-1, QG-2
-| S-4 | Graceful media degradation | Adaptive bitrate/resolution under CPU/bandwidth pressure so the stream degrades instead of dropping (R4 slice; the alfaview failure must not recur). | QG-3
+| S-4 | Graceful media degradation | Adaptive bitrate/resolution under CPU/bandwidth pressure so the stream degrades instead of dropping (R4 slice; the alfaview failure must not recur). Realized by BB-8 (`adapt.js` + `getStats`/`setParameters`). | QG-3
 | S-5 | Ports and adapters | Signaling, ICE, and video processing sit behind ports; each external dependency is swappable, preventing new lock-in (ADR-5). | QG-1, QG-4
 | S-6 | Client-side privacy | Background blur runs in the browser before the frame is encoded, so surroundings never leave the device (R3 slice). | QG-5
 |===
