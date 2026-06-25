@@ -69,7 +69,7 @@ endpoint; the vetted set with fallbacks is D-9/R2.
 | Sovereignty (G-1) | 0 | +1 | +1
 | Works across NAT | 0 | -1 | 0
 | Reliability | 0 | -1 | -1
-| *Sum* | *0* | *-2* | *0*
+| *Sum* | *0* | *-1* | *0*
 |===
 
 The chosen option ties the Google datum on raw count: a single interim DE
