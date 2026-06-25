@@ -67,21 +67,20 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 * *Postconditions (success)*: An invite capability-URL exists and has been handed to the Guest; the Host's peer connection waits for an answer.
 
 .Main success scenario
-. Host starts camera and microphone (→ UC-3).
-. Host requests an invite.
-. System generates a room id (BR-2), creates a WebRTC offer, gathers ICE candidates, and encodes offer + room id into a capability-URL (→ SYS-UC-1).
-. System shows the invite as a compact link (#44 — short text, full capability-URL in `href`) and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
-. Host sends the invite to the Guest over their own mail client (BR-4).
-. Host receives the Guest's answer token and loads it (→ SYS-UC-2).
-. System applies the answer; the connection establishes (BR-3); remote media appears.
+. Host clicks *Call eröffnen* — the System starts camera/mic AND, in the same step, generates a room id (BR-2), creates a WebRTC offer, gathers ICE, and encodes offer + room id into a capability-URL (→ UC-3, SYS-UC-1). In-call controls appear with the media (#46).
+. System shows the invite as a compact link (#44) and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action, with a prominent *keep this page open* note — the pending connection lives only in this page's memory (ADR-8).
+. Host sends the invite to the Guest over their own channel (BR-4).
+. Host receives the Guest's answer and pastes it into the open page (→ SYS-UC-2).
+. System applies the answer; the connection establishes (BR-3); remote media appears; the invite exchange collapses. The Host may add more guests via *Weitere einladen*.
 
 .Extensions
-* 1a. Camera/mic denied → System reports the failure; no invite is possible.
-* 3a. ICE gathering stalls → System ships the candidates gathered within the timeout and still produces a usable invite.
-* 2a/6a. Host requests a second invite while one is open → refused with a message (BR-6).
-* 6b. Host pastes their own invite → refused: one cannot answer one's own offer (BR-6, GD-1).
-* 6c. Answer token invalid → System reports the error; the connection keeps waiting (BR-7).
-* 7a. Connection fails (NAT/firewall, no TURN) → System reports the failed state.
+* 1a. Camera/mic denied → System reports the failure; no invite is created.
+* 1b. ICE gathering stalls → System ships the candidates gathered within the timeout and still produces a usable invite.
+* 4a. Host requests a second invite while one is open → refused with a message (BR-6).
+* 4b. Host pastes their own invite → refused: one cannot answer one's own offer (BR-6, GD-1).
+* 4c. Answer token invalid → System reports the error; the connection keeps waiting (BR-7).
+* X1. Host closes/reloads the page while a connection is pending → the browser warns (beforeunload); proceeding loses the pending connection (ADR-8, #46).
+* 5a. Connection fails (NAT/firewall, no TURN) → System reports the failed state.
 
 === UC-2 Join a call
 
@@ -92,18 +91,18 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 * *Postconditions (success)*: The Guest is connected; an answer token has been returned to the Host.
 
 .Main success scenario
-. Guest opens the invite URL; System detects and validates the embedded offer (→ SYS-UC-2) and shows the room id.
-. Guest starts camera and microphone (→ UC-3).
-. Guest joins; System applies the offer, creates an answer, gathers ICE, and encodes the answer into a capability-URL (→ SYS-UC-3).
-. System shows the answer as a compact link (#44) and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
-. Guest returns the answer to the Host (BR-4).
-. Connection establishes (BR-3); remote media appears.
+. Guest opens the invite URL; System detects and validates the embedded offer (→ SYS-UC-2), shows the room id and a single *Beitreten* action.
+. Guest clicks *Beitreten* — the System starts camera/mic AND, in the same step, applies the offer, creates an answer, gathers ICE, and encodes the answer (→ UC-3, SYS-UC-3).
+. System shows the answer as a *copy/paste token, not a clickable link* (#46) — opening it would reload and break a call — and offers Kopieren / Teilen-as-text, with a *keep this page open* note.
+. Guest returns the answer to the Host (BR-4); the Host pastes it.
+. Connection establishes (BR-3); remote media appears; the answer step collapses.
 
 .Extensions
 * 1a. Invite token invalid/oversized/corrupt → System reports the error; no join is offered (BR-7, VR-*).
-* 1b. Guest receives the invite as text, not a clickable link → Guest pastes it into the incoming field; System validates it the same way.
+* 1b. Guest receives the invite as text, not a clickable link → Guest pastes it under "Per Text eingeladen?"; System validates it the same way.
 * 2a. Camera/mic denied → System reports the failure; no answer is possible.
 * 3a. Guest joins twice → refused (BR-6, GD-1).
+* X1. Someone opens an `#answer=` link → System shows the answer guard ("kopieren und im Call-Tab einfügen"), never a broken join (#46).
 
 === UC-3 Select camera and microphone
 
@@ -196,7 +195,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 
 * *Input*: a validated pending offer; local media.
 * *Processing*: apply remote offer → create answer → set local description → gather ICE (timeout-bounded) → encode `{v:1, room, kind:"answer", sdp}` → prefix as `#answer=`.
-* *Output*: a capability-URL `https://…/#answer=<token>`.
+* *Output*: a capability-URL `https://…/#answer=<token>`, presented as a *copy/paste token, never a clickable link* (#46) — opening an `#answer=` URL would reload and destroy a pending call; if one is opened anyway, the System shows the answer guard.
 * *Errors*: join attempted without a pending offer, or twice → refused (BR-6, GD-1).
 
 === SYS-UC-4 Enumerate and select devices
@@ -425,6 +424,9 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-18 | Where the platform exposes native background blur, the system shall offer a blur toggle and apply it to the camera track; elsewhere it shall disable the toggle and shall not present an unblurred frame as blurred. (BR-11, SM-4, QS-5)
 | EARS-19 | Where the platform exposes the Web Share API, the system shall offer a native-share action for the invite/answer link; elsewhere it shall offer a `mailto:` action; the clipboard copy action is always offered. (SYS-UC-5, #42)
 | EARS-20 | When the user dismisses the native share sheet, the system shall treat it as a no-op — no error and no state change. (SYS-UC-5, #42)
+| EARS-21 | When the host opens a call (or the guest joins), the system shall start camera/mic and produce the invite (or answer) in a single action, and shall reveal in-call controls only once media is live. (UC-1, UC-2, #46)
+| EARS-22 | While a connection is pending (created but no peer connected), if the user attempts to leave or reload the page, the system shall warn before unload. (ADR-8, #46)
+| EARS-23 | The system shall present the answer as a copy/paste token, not an openable link; and when opened with an `#answer=` URL, shall show a guard instructing the user to paste it into the original call tab, never attempting a join. (#46)
 |===
 
 == Entities, states, and contracts complete the picture
