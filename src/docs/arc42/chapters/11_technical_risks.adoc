@@ -5,20 +5,28 @@ carries probability, impact, a derived priority, and a mitigation that reference
 a Chapter 8 mitigation or a Chapter 10 scenario. Each debt item names the
 Chapter 5 building block it burdens.
 
+Priority is derived from probability × impact, then adjusted by exposure on the
+primary path: a threat on the call's own signaling/delivery path outranks one
+that first requires compromising a third party. This rule makes the High/Med
+split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
+
 === Risks
 
 [cols="1,1,1,1,3",options="header"]
 |===
 | ID | Prob. | Impact | Priority | Mitigation (Ch. 8 / Ch. 10)
+| R-11 | High | High | *High* | The delivery host (GitHub Pages) is US-jurisdiction, contradicting G-1/QG-1 — the host serves the executable client code (T-003). ADR-6: migrate to a sovereign EU static host before claiming SM-2; tracked as an `adr-needed` issue.
 | R-1 | Med | High | *High* | Topology decision deferred to ADR-4 / issue #3; does not block R0–R4. The central tension between G-1/G-2 and 20-peer scale.
-| R-7 | Low | High | *High* | M-1 (DTLS-fingerprint check, VR-9) + fingerprint exchange over the capability channel (ADR-2); full broker-trust handling at R2.
-| R-3 | Med | Med | *Med* | M-4 (token is the bearer secret, CSPRNG room id, share-carefully warning); single-use/expiring tokens deferred (threat-model backlog).
-| R-10 | Low | High | *Med* | M-2 (CSP, no external scripts); SRI + Trusted Types are the next hardening step.
+| R-12 | Med | High | *High* | No TURN (TC-7): behind symmetric/CGNAT NAT the call cannot establish (Runtime Scenario 2), directly threatening SM-1 (the round runs with no Zoom fallback). Mitigation: TURN relay deferred (issue #4) — adding it trades against G-2.
+| R-7 | Low | High | *High* | On the signaling path. M-1 (DTLS-fingerprint check, VR-9) + fingerprint exchange over the capability channel (ADR-2); full broker-trust handling at R2.
+| R-3 | Med | Med | *Med* | M-4 (token is the bearer secret, CSPRNG room id, advisory share-carefully); single-use/expiring tokens deferred. *Same root cause as R-9* (a leaked link with no moderation) — treat as one bearer-secret-without-moderation cluster.
+| R-10 | Low | High | *Med* | One step removed (needs host/CDN/dependency compromise first). M-2 (CSP, no external scripts); SRI + Trusted Types deferred — required before the R3 WASM blur model ships.
 | R-2 | Med | Med | *Med* | S-5 (swappable endpoints) + D-9 vetted sovereign STUN set with fallbacks.
-| R-6 | High | Low | *Med* | Disclosed (EARS-10); TURN relay is the deferred mitigation (issue #4) — adding it trades against G-2.
-| R-9 | Med | Med | *Med* | Host admit/kick/mute raised to Should scope; not yet built (closes T-009).
+| R-6 | High | Low | *Med* | Disclosed (EARS-10, T-005b); TURN relay is the deferred mitigation (issue #4) — adding it trades against G-2.
+| R-9 | Med | Med | *Med* | Host admit/kick/mute raised to Should scope; not yet built (will close T-009). Clustered with R-3.
 | R-4 | Med | Med | *Med* | Fail-closed blur on model-load failure; bounded by QS-5; perf-vs-CPU watched against QG-3.
 | R-8 | Low | Med | *Low* | M-6 (prefer single window + pre-share warning).
+| R-13 | Med | Low | *Low* | Zero-egress (G-9) means no remote diagnostics; field failures are user-reported only. Accepted trade from ADR-1; no mitigation planned.
 | R-5 | Low | Low | *Low* | Accepted; browser-only, no native mobile (no mitigation planned).
 |===
 

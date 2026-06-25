@@ -30,7 +30,7 @@ S --> UI : capability-URL + mailto draft
 Host ->> Guest : send link (out-of-band)
 Guest -> UI : open link
 UI -> C : decode
-C -> V : validate VR-1..9
+C -> V : validate VR-1..6,8,9
 V --> UI : valid offer
 Guest -> UI : start camera/mic + join
 UI -> S : joinAnswer()

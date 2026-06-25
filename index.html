@@ -8,6 +8,8 @@
        because this is a single self-contained file with no external origins. -->
   <meta http-equiv="Content-Security-Policy"
         content="script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
+  <!-- Never leak the capability token (in the URL fragment) via the Referer header (M-7 / T-011). -->
+  <meta name="referrer" content="no-referrer" />
   <title>ultrathink.call</title>
   <style>
     :root { color-scheme: dark; }

@@ -41,6 +41,12 @@ mail ..> gb : capability-URL
 | Out-of-band channel | Carries the capability-URL | The host's own mail client; never operated by us (BR-4).
 |===
 
+CAUTION: GitHub Pages is US-jurisdiction (Microsoft). As the host delivering the
+client code, it is a runtime endpoint and an open sovereignty gap against
+G-1/QG-1 — tracked as R-11 and decision ADR-6. Migrating the *delivery* host to a
+sovereign EU static host is required before SM-2 is claimed met; the repository
+and CI on GitHub are unaffected (not a runtime endpoint).
+
 The architecture documentation itself is rendered by docToolchain `generateSite`
 in the same Pages workflow and published under `/architecture/`, so the app
 stays at the site root.

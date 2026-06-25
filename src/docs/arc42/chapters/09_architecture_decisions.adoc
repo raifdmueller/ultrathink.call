@@ -13,6 +13,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-3 | Sovereign (non-US) STUN; no Google | Accepted
 | ADR-4 | Topology for the ~20-participant training case | Proposed (open — issue #3)
 | ADR-5 | Ports and adapters for external dependencies | Accepted
+| ADR-6 | Static host: GitHub Pages as interim, not sovereign | Accepted (inferred, interim)
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -67,12 +68,17 @@ endpoint; the vetted set with fallbacks is D-9/R2.
 | Criterion | Google STUN — datum | No STUN (host candidates only) | Sovereign STUN (DE)
 | Sovereignty (G-1) | 0 | +1 | +1
 | Works across NAT | 0 | -1 | 0
-| Reliability | 0 | -1 | 0
-| *Sum* | *0* | *-1* | *+1*
+| Reliability | 0 | -1 | -1
+| *Sum* | *0* | *-2* | *0*
 |===
 
-*Consequences*: removes the G-1 violation; creates *R-2* (single interim endpoint
-availability) until D-9 adds vetted fallbacks.
+The chosen option ties the Google datum on raw count: a single interim DE
+endpoint is genuinely less reliable than Google's anycast (the R-2 cost, now
+visible in the matrix). The tie is broken by *QG-1 (sovereignty)*, the
+top-ranked quality goal (Chapter 1.2).
+
+*Consequences*: removes the G-1 violation in the media path; creates *R-2*
+(single interim endpoint availability) until D-9 adds vetted fallbacks.
 
 === ADR-4 Topology for the ~20-participant training case
 
@@ -111,4 +117,33 @@ port; adapters form an anti-corruption layer.
 
 *Consequences*: chosen for modifiability and testability; the seam is specified
 now but the extraction is deliberately deferred to R2's Mikado first step
-(*tech-debt*, issue #7) to avoid a speculative abstraction (YAGNI).
+(*tech-debt*, issue #7) to avoid a speculative abstraction (YAGNI). Creates no
+new tracked risk; the deferred extraction is tracked as TD-1 / issue #7.
+
+=== ADR-6 Static host: GitHub Pages as interim, not sovereign
+
+*Status*: Accepted (inferred, interim). *Context*: the static host delivers the
+executable client code and is therefore a runtime endpoint that G-1/TC-2 require
+to be non-US. The project currently deploys to *GitHub Pages* (Microsoft, US),
+which contradicts that goal — surfaced by the ATAM review. *Decision*: accept
+GitHub Pages as an explicit interim while the app is a tracer, and treat the
+move to a sovereign EU static host as required before any sovereignty claim
+(SM-2) is presented as met. The end decision (which host) is the product owner's.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | GitHub Pages — datum | EU sovereign Pages (Codeberg / GitLab-EU) | Self-hosted EU
+| Sovereignty (G-1) | 0 | +1 | +1
+| Zero-ops (G-2) | 0 | 0 | -1
+| Migration effort | 0 | -1 | -1
+| *Sum* | *0* | *0* | *-1*
+|===
+
+The Pugh tie (datum vs. EU Pages) is again broken by QG-1: EU Pages wins on the
+top-ranked goal at no zero-ops cost. The cell that needs owner input — the exact
+host — is left to the decision in issue (host migration).
+
+*Consequences*: until migrated, the deployed app violates G-1; recorded as
+*R-11* (high) and tracked as an `adr-needed` issue. Development and source on
+GitHub are unaffected (not a runtime endpoint); only the *delivery* host is in
+scope.
