@@ -238,6 +238,13 @@ holds the link may enter. The room ID is a CSPRNG-generated UUIDv4 (SM-6), so it
 is not guessable or enumerable. No backend, no login. The URL fragment never
 leaves the browser, so it does not land in server logs.
 
+At R1 there is no broker yet, so the capability-URL carries the WebRTC SDP
+itself in the fragment (`#invite=`/`#answer=`): the whole token is the bearer
+secret, and possessing it — not guessing the room id — is what admits a peer.
+Once the R2 broker exists, the `#room=<uuid>` form becomes the lookup key the
+broker matches peers on, and the UUID is the secret. The CSPRNG room id (SM-6)
+applies in both forms.
+
 Distribution stays loosely coupled and infrastructure-free: the host opens the
 call, and the app generates a `mailto:` link (subject plus body carrying the
 capability-URL) that the host's *own* mail client sends to the other

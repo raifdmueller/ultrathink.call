@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Harden against host/dependency compromise (PRD R-10): no external scripts,
+       no framing, no <base> hijack, no plugins. Inline script/style are allowed
+       because this is a single self-contained file with no external origins. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
   <title>ultrathink.call</title>
   <style>
     :root { color-scheme: dark; }
@@ -49,7 +54,6 @@
     .hint { font-size: .78rem; color: #9aa3ad; margin: .35rem 0 0; }
     #status { font-size: .82rem; color: #7fd18b; min-height: 1.1em; margin-bottom: .5rem; }
     .room { font-size: .78rem; color: #9aa3ad; }
-    .room b { color: #cfd4da; font-family: ui-monospace, monospace; }
     .hidden { display: none; }
   </style>
 </head>
@@ -57,9 +61,9 @@
   <h1>ultrathink.call</h1>
   <p class="lead">
     Souveräner P2P-Videocall für 2 Personen, ohne eigenen Server. Du wählst Kamera und
-    Mikrofon, lädst per Link (E-Mail) ein, teilst optional den Bildschirm. Öffentlicher STUN,
-    kein TURN. Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze R-6) — teile ihn
-    nur mit den eingeladenen Personen.
+    Mikrofon, lädst per Link (E-Mail) ein, teilst optional den Bildschirm. Souveräner STUN
+    (Nextcloud, DE), kein TURN. Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze
+    R-6) — teile ihn nur mit den eingeladenen Personen.
   </p>
 
   <div class="videos">
@@ -119,16 +123,16 @@
   <script>
     // --- ultrathink.call R1: device selection + capability-URL signaling, 2 peers, no server. ---
     // Signaling is server-less: the SDP offer/answer is gzip-compressed and carried in the URL
-    // fragment (#invite=/#answer=), shared via the host's own mail client (mailto:). The room id
-    // is a CSPRNG UUIDv4 (PRD SM-6). The automatic broker arrives in R2; until then the link IS
-    // the channel. Known limitation: the SDP exposes the public IP (PRD risk R-6).
-    // Media is always DTLS-SRTP encrypted by WebRTC, with no plaintext fallback (PRD G-8).
-    const ICE_CONFIG = {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
-    };
+    // fragment (#invite=/#answer=), shared via the host's own mail client (mailto:). At R1 the
+    // whole token is the capability secret. The automatic broker (and the #room=<uuid> identity)
+    // arrives in R2. Media is always DTLS-SRTP encrypted by WebRTC, no plaintext fallback (G-8).
+    // Known limitation: the SDP exposes the public IP (R-6).
+    //
+    // Sovereign (non-US) STUN — Nextcloud GmbH (Germany) — to honor G-1. No TURN (deliberate).
+    // Interim choice for R1; the vetted sovereign set with fallbacks is D-9/R2 (tracked as issue).
+    const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.nextcloud.com:443" }] };
+    const MAX_TOKEN = 100000;        // reject oversized pasted/linked payloads (anti-DoS)
+    const ICE_TIMEOUT_MS = 4000;     // ship whatever candidates we have if gathering stalls
 
     const $ = (id) => document.getElementById(id);
     const status = (msg) => { $("status").textContent = msg; };
@@ -174,10 +178,16 @@
       const gz = await gzip(json);
       return gz && gz.length < raw.length ? "g" + b64urlEnc(gz) : "r" + b64urlEnc(raw);
     }
+    // Decode AND validate: every field here is attacker-influenceable (URL fragment / pasted text).
     async function decodePayload(token) {
+      if (!token || token.length > MAX_TOKEN) throw new Error("Eingabe fehlt oder ist zu groß.");
       const tag = token[0], body = b64urlDec(token.slice(1));
       const json = tag === "g" ? await gunzip(body) : new TextDecoder().decode(body);
-      return JSON.parse(json);
+      const p = JSON.parse(json);
+      if (p?.v !== 1 || (p.kind !== "offer" && p.kind !== "answer")) throw new Error("Unbekanntes Format.");
+      if (typeof p.room !== "string" || !/^[0-9a-f-]{36}$/i.test(p.room)) throw new Error("Ungültige Raum-ID.");
+      if (!p.sdp || p.sdp.type !== p.kind || typeof p.sdp.sdp !== "string") throw new Error("Ungültiges SDP.");
+      return p;
     }
     // Accept a full link (#invite=/#answer=) or the bare encoded token.
     function extractToken(text) {
@@ -187,14 +197,15 @@
     }
 
     // --- Media ----------------------------------------------------------------------
-    async function getMedia(constraints) {
-      return navigator.mediaDevices.getUserMedia(constraints);
-    }
+    const getMedia = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
 
     function newPeerConnection() {
       const peer = new RTCPeerConnection(ICE_CONFIG);
       peer.addEventListener("track", (e) => { $("remoteVideo").srcObject = e.streams[0]; });
-      peer.addEventListener("connectionstatechange", () => status("Verbindung: " + peer.connectionState));
+      peer.addEventListener("connectionstatechange", () => {
+        status("Verbindung: " + peer.connectionState);
+        if (peer.connectionState === "failed") status("Verbindung fehlgeschlagen (evtl. NAT/Firewall — kein TURN).");
+      });
       for (const track of localStream.getTracks()) {
         const sender = peer.addTrack(track, localStream);
         if (track.kind === "video") { videoSender = sender; camTrack = track; }
@@ -203,15 +214,14 @@
       return peer;
     }
 
-    // Non-trickle ICE: wait for gathering to complete so one payload carries all candidates.
+    // Non-trickle ICE: wait for gathering to complete (or a timeout) so one payload
+    // carries all candidates and a single link suffices.
     function waitForIce(peer) {
       return new Promise((resolve) => {
         if (peer.iceGatheringState === "complete") return resolve();
-        const check = () => {
-          if (peer.iceGatheringState === "complete") {
-            peer.removeEventListener("icegatheringstatechange", check); resolve();
-          }
-        };
+        const done = () => { peer.removeEventListener("icegatheringstatechange", check); clearTimeout(t); resolve(); };
+        const check = () => { if (peer.iceGatheringState === "complete") done(); };
+        const t = setTimeout(done, ICE_TIMEOUT_MS);
         peer.addEventListener("icegatheringstatechange", check);
       });
     }
@@ -238,7 +248,7 @@
     async function populateDevices() {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const fill = (sel, kind, current) => {
-        const el = $(sel); el.innerHTML = "";
+        const el = $(sel); el.replaceChildren();
         devices.filter((d) => d.kind === kind).forEach((d, i) => {
           const o = document.createElement("option");
           o.value = d.deviceId;
@@ -257,9 +267,8 @@
           video: { deviceId: { exact: $("camSelect").value } },
           audio: { deviceId: { exact: $("micSelect").value } },
         });
-        // Replace tracks on the live connection without renegotiation.
         const v = next.getVideoTracks()[0], a = next.getAudioTracks()[0];
-        if (videoSender) await videoSender.replaceTrack(v);
+        if (videoSender) await videoSender.replaceTrack(v);   // swap live, no renegotiation
         if (audioSender) await audioSender.replaceTrack(a);
         localStream.getTracks().forEach((t) => t.stop());
         localStream = next;
@@ -275,8 +284,10 @@
 
     // --- Host: create invite --------------------------------------------------------
     $("createInvite").addEventListener("click", async () => {
+      if (pc) return;                       // guard: one connection per session (mesh is R2)
+      $("createInvite").disabled = true;
       try {
-        roomId = crypto.randomUUID();        // CSPRNG UUIDv4 — PRD SM-6
+        roomId = crypto.randomUUID();       // CSPRNG UUIDv4 — PRD SM-6
         setRoom();
         pc = newPeerConnection();
         const offer = await pc.createOffer();
@@ -288,6 +299,7 @@
         $("mailInvite").disabled = false;
         status("Einladung erstellt. Schick den Link per E-Mail und füge unten die Antwort ein.");
       } catch (err) {
+        pc = null; $("createInvite").disabled = false;
         status("Einladung fehlgeschlagen: " + err.message);
       }
     });
@@ -299,18 +311,17 @@
       try {
         const payload = await decodePayload(extractToken(text));
         if (payload.kind === "offer") {
+          if (pc) { status("Du hast schon eine eigene Einladung offen — du kannst nicht deiner eigenen beitreten."); return; }
           pendingOffer = payload.sdp;
           roomId = payload.room; setRoom();
           show("joinAnswer", localStream != null);
           status(localStream
             ? "Einladung geladen. Jetzt „Beitreten & Antwort erzeugen“."
             : "Einladung geladen. Starte zuerst Kamera + Mikro, dann beitreten.");
-        } else if (payload.kind === "answer") {
+        } else { // answer
           if (!pc) { status("Es gibt keine offene Einladung für diese Antwort."); return; }
           await pc.setRemoteDescription(payload.sdp);
           status("Antwort übernommen — Verbindung wird aufgebaut …");
-        } else {
-          status("Unbekanntes Format.");
         }
       } catch (err) {
         status("Konnte Eingabe nicht lesen: " + err.message);
@@ -319,6 +330,8 @@
 
     // --- Guest: join and produce an answer ------------------------------------------
     $("joinAnswer").addEventListener("click", async () => {
+      if (pc || !pendingOffer) return;      // guard: only join once, only with a loaded invite
+      $("joinAnswer").disabled = true;
       try {
         pc = newPeerConnection();
         await pc.setRemoteDescription(pendingOffer);
@@ -332,6 +345,7 @@
         show("joinAnswer", false);
         status("Antwort erzeugt. Schick sie dem Host zurück.");
       } catch (err) {
+        pc = null; $("joinAnswer").disabled = false;
         status("Beitritt fehlgeschlagen: " + err.message);
       }
     });
@@ -353,13 +367,13 @@
     // --- Screensharing: swap the outgoing video track, no renegotiation -------------
     $("shareScreen").addEventListener("click", async () => {
       try {
-        const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const display = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
         const screenTrack = display.getVideoTracks()[0];
         if (videoSender) await videoSender.replaceTrack(screenTrack);
         $("localVideo").srcObject = display;
         show("deviceRow", false);
         $("shareScreen").disabled = true; $("stopShare").disabled = false;
-        status("Bildschirm wird geteilt.");
+        status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
         screenTrack.addEventListener("ended", restoreCamera);  // user stops via browser UI
       } catch (err) {
         status("Screensharing abgebrochen: " + err.message);
@@ -367,6 +381,8 @@
     });
     $("stopShare").addEventListener("click", restoreCamera);
     async function restoreCamera() {
+      // Re-read the current camera track rather than trusting a possibly-stale reference.
+      camTrack = localStream.getVideoTracks()[0] || camTrack;
       if (videoSender && camTrack) await videoSender.replaceTrack(camTrack);
       $("localVideo").srcObject = localStream;
       show("deviceRow", true);
@@ -380,10 +396,10 @@
       if (!m) return;
       $("incomingIn").value = location.hash;
       decodePayload(m[1]).then((p) => {
-        if (p.kind !== "offer") return;
         pendingOffer = p.sdp; roomId = p.room; setRoom();
+        if (localStream) show("joinAnswer", true);   // covers startCam-before-detect race
         status("Du wurdest eingeladen. Starte Kamera + Mikro, dann „Beitreten & Antwort erzeugen“.");
-      }).catch(() => status("Einladungs-Link konnte nicht gelesen werden."));
+      }).catch((err) => status("Einladungs-Link konnte nicht gelesen werden: " + err.message));
     })();
   </script>
 </body>
