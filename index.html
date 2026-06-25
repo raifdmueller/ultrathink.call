@@ -140,7 +140,13 @@
     <p class="keepopen">Lass auch du diese Seite offen, bis ihr verbunden seid.</p>
   </section>
 
-  <!-- Safety net: someone opened an #answer= link --------------------------------->
+  <!-- Click-to-apply succeeded: the answer was handed to the call tab (#65) ------->
+  <section class="card hidden" id="answerDone">
+    <h2>Antwort übernommen ✓</h2>
+    <p class="hint">Die Antwort wurde an deinen Call übergeben. Du kannst diesen Tab schließen.</p>
+  </section>
+
+  <!-- Safety net: someone opened an #answer= link, no call tab on this device ---->
   <section class="card hidden" id="answerGuard">
     <h2>Das ist eine Antwort, kein Link zum Öffnen</h2>
     <p class="hint">Du hast eine Antwort geöffnet. Sie gehört in den ursprünglichen Call-Tab des Hosts —

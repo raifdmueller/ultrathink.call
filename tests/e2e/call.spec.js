@@ -236,6 +236,30 @@ test("chat renders messages as text, never HTML (#48, BR-8)", async ({ browser }
   expect(await guest.locator("#chatLog img").count()).toBe(0); // never interpreted as HTML
 });
 
+test("opening the answer link auto-applies it via the call tab (#65)", async ({ browser }) => {
+  const hostCtx = await browser.newContext({ permissions: ["camera", "microphone"] });
+  const host = await hostCtx.newPage();
+  const { page: guest } = await newPeer(browser);
+
+  await host.goto("/");
+  await host.click("#openCall");
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
+  const invite = await host.locator("#inviteLink").getAttribute("href");
+  await guest.goto(invite);
+  await guest.click("#join");
+  await expect(guest.locator("#answerCode")).not.toHaveValue("", { timeout: 20000 });
+  const answer = await guest.locator("#answerCode").inputValue();
+
+  // The host "clicks" the answer: open it in a SECOND tab of the same browser.
+  const helper = await hostCtx.newPage();
+  await helper.goto(answer);
+
+  // The call tab applies it automatically — no manual paste.
+  await tileHasStream(host, "p1");
+  await expect(helper.locator("#answerDone")).toBeVisible({ timeout: 10000 });
+  await hostCtx.close();
+});
+
 test("the invite copies as a rich HTML link plus a plain-text fallback (#60)", async ({ browser }) => {
   const ctx = await browser.newContext({ permissions: ["camera", "microphone", "clipboard-read", "clipboard-write"] });
   const page = await ctx.newPage();
