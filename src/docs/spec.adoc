@@ -230,7 +230,7 @@ NOTE: This is *self*-mute (sender-side, `track.enabled`), distinct from host mod
 
 * *Input*: a validated pending offer; local media.
 * *Processing*: apply remote offer → create answer → set local description → gather ICE (timeout-bounded) → encode `{v:1, room, kind:"answer", sdp}` → prefix as `#answer=`.
-* *Output*: a capability-URL `https://…/#answer=<token>`, presented as a *copy/paste token, never a clickable link* (#46) — opening an `#answer=` URL would reload and destroy a pending call; if one is opened anyway, the System shows the answer guard.
+* *Output*: a capability-URL `https://…/#answer=<token>`. It is now a *clickable* link with a safe hand-off (#65): opening it on the host's device posts the answer over a same-origin `BroadcastChannel` to the open call tab, which applies it on the live connection — no reload, no broken call. If no call tab acks (e.g. opened on another device), it falls back to the manual answer guard (#46).
 * *Errors*: join attempted without a pending offer, or twice → refused (BR-6, GD-1).
 
 === SYS-UC-4 Enumerate and select devices
@@ -472,6 +472,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-26 | When a received chat line exceeds the cap or is malformed, the system shall drop it without rendering. (SYS-UC-7, #48)
 | EARS-27 | The host shall keep an authoritative set of muted peers, replay it to a joining guest, and re-assert it on each fresh track, so a peer muted before a link exists is still silenced; the host UI shall derive its mute label from that set. (UC-5, #37)
 | EARS-28 | When the user copies the invite, the system shall write a rich link (`text/html` anchor plus a `text/plain` URL fallback) where the Clipboard API supports it, and a plain-text URL otherwise. (SYS-UC-5, #60)
+| EARS-29 | When an `#answer=` link is opened, the system shall hand the answer to an open call tab on the same origin via `BroadcastChannel` and apply it there (validated); if no call tab acknowledges within a short window, it shall fall back to the manual answer guard, never attempting a join in the opened tab. (SYS-UC-3, #65, #46)
 |===
 
 == Entities, states, and contracts complete the picture

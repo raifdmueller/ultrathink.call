@@ -14,6 +14,7 @@ const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
 const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:", linkLabel: "ultrathink.call-Einladung" };
 const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:" };
+const ANSWER_CHANNEL = "ultrathink-call-answers"; // same-origin tab hand-off (#65)
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
@@ -290,6 +291,7 @@ async function createInvite() {
   try {
     if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
     ensureMesh(true);
+    listenForAnswers(); // accept a click-to-apply answer from another tab (#65)
     const offer = await mesh.createBootstrapOffer();
     setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
     applyShareChannels("shareInvite", "mailInvite");
@@ -332,6 +334,45 @@ function showGuestStart() {
   $("guestRoom").textContent = roomId ? "Raum: " + roomId : "";
 }
 
+// --- Click-to-apply answer (#65): same-origin tab hand-off via BroadcastChannel --
+// The call tab listens while it has a pending invite; an opened #answer= tab posts
+// the answer here, we apply it on the live connection and ack. No server.
+let answerChannel = null;
+function listenForAnswers() {
+  if (answerChannel) return;
+  answerChannel = new BroadcastChannel(ANSWER_CHANNEL);
+  answerChannel.onmessage = async (e) => {
+    if (e.data?.t !== "answer" || !mesh?.isHost || !bootstrapPending) return;
+    await ingestIncoming(e.data.url);              // validates + applies (same path as paste)
+    if (!bootstrapPending) answerChannel.postMessage({ t: "answer-ack", nonce: e.data.nonce }); // accepted; echo the nonce
+  };
+}
+
+// On a freshly-opened #answer= tab: hand the answer to a call tab on this device;
+// if none acks in time, fall back to the manual guard (#46) — never a broken join.
+// A nonce binds the ack to our request (a forged bare ack can't fake success); a
+// `settled` latch means whichever path wins first is final (no late flip-flop).
+function forwardAnswer() {
+  const answerUrl = location.href;
+  const nonce = crypto.randomUUID();
+  const ch = new BroadcastChannel(ANSWER_CHANNEL);
+  let settled = false;
+  ch.onmessage = (e) => {
+    if (settled || e.data?.t !== "answer-ack" || e.data.nonce !== nonce) return;
+    settled = true;
+    showStep("none"); show("answerDone", true);
+    status("Antwort übernommen — du kannst diesen Tab schließen.");
+  };
+  ch.postMessage({ t: "answer", url: answerUrl, nonce });
+  setTimeout(() => {
+    if (settled) return;
+    settled = true; ch.close(); // commit the fallback; ignore any later ack
+    $("guardCode").value = answerUrl;
+    showStep("guard");
+    status("Kein offener Call-Tab gefunden — kopiere die Antwort und füge sie im Call-Tab ein.");
+  }, 1200);
+}
+
 // Host: one step — camera + first invite. Only commit the phase transition once
 // the invite actually exists, so a failed offer doesn't strand the start screen.
 $("openCall").addEventListener("click", async () => {
@@ -367,7 +408,7 @@ $("join").addEventListener("click", async () => {
 $("pasteLoad").addEventListener("click", () => ingestIncoming($("pasteIn").value));
 $("answerLoad").addEventListener("click", () => ingestIncoming($("answerIn").value));
 $("inviteMore").addEventListener("click", () => createInvite());
-$("leaveCall").addEventListener("click", () => { disarmUnloadGuard(); mesh?.close(); mesh = null; location.reload(); });
+$("leaveCall").addEventListener("click", () => { disarmUnloadGuard(); answerChannel?.close(); answerChannel = null; mesh?.close(); mesh = null; location.reload(); });
 
 // --- Distribution: native share / clipboard / mailto (#42) -----------------------
 function applyShareChannels(shareId, mailId) {
@@ -383,16 +424,16 @@ const linkUrl = (id) => $(id).getAttribute("href") || "";
 
 const copyText = (text) => navigator.clipboard.writeText(text).then(() => status("In die Zwischenablage kopiert."));
 
-// Copy the invite as a RICH link (#60): text/html so pasting into an HTML mail
-// editor gives a compact clickable link, plus a text/plain fallback (the full URL)
-// for plain-text targets. Falls back to plain copy where ClipboardItem is absent.
+// Copy a capability-URL as a RICH link (#60): text/html so pasting into an HTML
+// mail editor gives a compact clickable link, plus a text/plain fallback (the full
+// URL). Falls back to plain copy where ClipboardItem is absent. The answer is rich
+// too (#65) — the host clicks it and it auto-applies.
 const escAttr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-async function copyInviteRich() {
-  const url = linkUrl("inviteLink");
+async function copyRich(url, label) {
   if (!url) return;
   try {
     if (window.ClipboardItem && navigator.clipboard.write) {
-      const html = `<a href="${escAttr(url)}">${INVITE_MSG.linkLabel}</a>`;
+      const html = `<a href="${escAttr(url)}">${escAttr(label)}</a>`;
       await navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([html], { type: "text/html" }),
         "text/plain": new Blob([url], { type: "text/plain" }),
@@ -407,8 +448,8 @@ async function copyInviteRich() {
     catch { status("Kopieren fehlgeschlagen."); }
   }
 }
-$("copyInvite").addEventListener("click", copyInviteRich);
-$("copyAnswer").addEventListener("click", () => copyText($("answerCode").value));
+$("copyInvite").addEventListener("click", () => copyRich(linkUrl("inviteLink"), INVITE_MSG.linkLabel));
+$("copyAnswer").addEventListener("click", () => copyRich($("answerCode").value, "ultrathink.call-Antwort"));
 $("guardCopy").addEventListener("click", () => copyText($("guardCode").value));
 
 // navigator.share rejects with AbortError when the user dismisses the sheet — not
@@ -473,10 +514,9 @@ async function restoreCamera() {
       showGuestStart();
       status("Du wurdest eingeladen. Klick „Beitreten“.");
     } else {
-      // An #answer= link was opened — it belongs in the host's open call tab (#46).
-      $("guardCode").value = location.href;
-      showStep("guard");
-      status("Das ist eine Antwort — kopiere sie und füge sie im Call-Tab ein.");
+      // An #answer= link was opened — hand it to a call tab on this device (#65);
+      // forwardAnswer falls back to the manual guard (#46) if none acks.
+      forwardAnswer();
     }
   }).catch((err) => status("Link konnte nicht gelesen werden: " + err.message));
 })();
