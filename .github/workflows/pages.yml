@@ -48,8 +48,9 @@ jobs:
 
       - name: Assemble Pages artifact (app at /, architecture at /architecture/)
         run: |
-          mkdir -p public/architecture
+          mkdir -p public/architecture public/src
           cp index.html public/
+          cp -r src/app public/src/app
           cp -r build/microsite/output/. public/architecture/
           touch public/.nojekyll
 

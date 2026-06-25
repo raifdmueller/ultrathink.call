@@ -1,0 +1,29 @@
+// Signaling Transport port (BB-4) + the Manual adapter (capability-URL + mailto).
+//
+// The port contract is transport-agnostic: produce a capability token for a local
+// description, and consume one from untrusted text. Today there is one adapter —
+// the manual links below; the R2 broker adapter (issue #22) is the second one and
+// must not touch peer.js or codec.js.
+import { encodePayload, decodePayload, extractToken } from "./codec.js";
+
+const baseUrl = () => location.origin + location.pathname;
+
+export async function buildCapabilityUrl(kind, room, sdp) {
+  const token = await encodePayload({ v: 1, room, kind, sdp });
+  const fragment = kind === "offer" ? "invite" : "answer"; // payload kind vs URL fragment name
+  return `${baseUrl()}#${fragment}=${token}`;
+}
+
+export async function parseIncoming(text) {
+  return decodePayload(extractToken(text));
+}
+
+export function mailtoLink(subject, intro, url) {
+  const body = `${intro}\n\n${url}\n`;
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+export function inviteTokenInHash() {
+  const m = location.hash.match(/#invite=([A-Za-z0-9\-_]+)/);
+  return m ? m[1] : null;
+}

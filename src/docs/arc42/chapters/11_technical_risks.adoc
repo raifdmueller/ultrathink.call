@@ -35,10 +35,10 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 [cols="1,3,1",options="header"]
 |===
 | ID | Debt — and the building block it burdens | Tracking
-| TD-1 | Signaling is welded to DOM handlers with no extracted port and no unit-testable codec. Burdens *BB-4 Signaling Transport* and *BB-5 Token Codec*. | issue #7 (Mikado first step of R2)
+| TD-1 | *Resolved (EPIC 1):* signaling extracted to a port (`src/app/signaling.js`) and a pure, unit-tested codec (`src/app/codec.js`); the broker is now a drop-in second adapter. Was: BB-4/BB-5. | issue #7 (done)
 | TD-2 | A single interim STUN with no vetted sovereign set or fallbacks. Burdens *BB-3 Peer Connection* (ICE config). | D-9 / R2
 | TD-3 | No automatic reconnect and no `RTCPeerConnection` teardown on failure. Burdens *BB-3 Peer Connection*. | R0-noted limitation
-| TD-4 | A single global `pc` bakes in the one-peer assumption, blocking the mesh. Burdens *BB-3 Peer Connection* (needs a `PeerSession` map). | issue #7
-| TD-5 | No automated tests yet; R0–R1 are tracer slices. Burdens *BB-5 Token Codec* and *BB-6 Validation*. | issue #7 (unblocks the unit layer)
+| TD-4 | *Resolved (EPIC 1):* a `PeerSession` class (`src/app/peer.js`) replaces the global `pc`; the R2 mesh becomes a map of sessions, not a rewrite. | issue #7 (done)
+| TD-5 | *Partly resolved (EPIC 1):* unit tests (codec/VR) and a Playwright E2E exist and run in CI; the integration layer follows with the R2 broker adapter. Burdens *BB-5*/*BB-6*. | issue #20
 | TD-6 | Delivery host is GitHub Pages (US) instead of the chosen sovereign target Codeberg Pages (DE). Burdens the Deployment view (Ch. 7) and G-1; migration expected trivial. | issue #10 (ADR-6 / R-11)
 |===

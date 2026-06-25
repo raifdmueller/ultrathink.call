@@ -62,9 +62,12 @@ testing pyramid, broad base first:
 * *Integration* — the signaling handshake through the port adapter (offer→answer→connected). Traces to UC-1, UC-2, SYS-UC-1..3.
 * *End-to-end* — two browser contexts complete a call and a screen share. Traces to UC-1..UC-4, SM-5.
 
-Current state (honest): R0–R1 are tracer-bullet slices with no automated tests
-yet; the codec extraction (issue #7) is the prerequisite that unblocks the unit
-layer. Each future test references its UC/BR/VR id for traceability.
+Current state: the signaling port and pure codec are extracted (issue #7 done),
+which unblocked the layers — the codec/validation rules carry vitest unit tests
+(`tests/codec.test.js`, VR-1..6,8,9) and a Playwright E2E drives a real two-peer
+handshake (`tests/e2e/call.spec.js`, UC-1/UC-2/SM-5). Both run in CI
+(`.github/workflows/test.yml`). The integration layer (broker handshake) follows
+with the R2 adapter. Each test references its UC/BR/VR id for traceability.
 
 === Observability
 

@@ -1,0 +1,16 @@
+{
+  "name": "ultrathink-call",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sovereign, server-less P2P video call. Dev-only tooling — the app itself ships as static files with no build and no runtime dependencies.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "vitest": "^2.1.8"
+  }
+}
