@@ -28,7 +28,7 @@ function setTile(peerId, stream) {
     const v = document.createElement("video");
     v.autoplay = true; v.playsInline = true;
     const label = document.createElement("span");
-    label.textContent = peerId === "host" ? "Host" : "Peer " + peerId;
+    label.textContent = peerId === "host" ? "Host" : "Gast " + peerId.replace(/^p/, "");
     tile.append(v, label);
     $("videos").appendChild(tile);
   }
@@ -95,6 +95,7 @@ async function switchDevices() {
     });
     const v = next.getVideoTracks()[0], a = next.getAudioTracks()[0];
     for (const s of (mesh ? mesh.peers.values() : [])) { await s.replaceVideo(v); await s.replaceAudio(a); }
+    mesh?.setStream(next); // peers that form later use the new tracks too
     localStream.getTracks().forEach((t) => t.stop());
     localStream = next; camTrack = v;
     $("localVideo").srcObject = next;

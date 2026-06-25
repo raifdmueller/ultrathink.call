@@ -76,3 +76,34 @@ UI --> Guest : "failed (NAT/firewall — no TURN)"
 The recovery for the NAT case is explicit and bounded: the System reports the
 failed state rather than hanging (EARS-4 timeout, R-1/R-6). A TURN relay is the
 deferred mitigation (issue #4).
+
+=== Scenario 3 — Mesh formation via the host relay (BB-7)
+
+After two guests are bootstrapped, the mesh completes itself: the host relays
+the new guest's offer to the existing guest and the answer back, so the guests
+connect directly (no media through the host).
+
+[plantuml,rt-mesh,svg]
+----
+@startuml
+participant "Host\n(BB-7)" as H
+participant "Guest A\n(BB-7)" as A
+participant "Guest B (new)\n(BB-7)" as B
+
+H -> B : welcome { id=p2, peers=[p1] }
+B -> B : create PeerSession(offerer) for p1
+B -> H : signal { to=p1, kind=offer, sdp } (over ctrl)
+H -> H : validate route; stamp authoritative from=p2
+H -> A : signal { from=p2, kind=offer, sdp }
+A -> A : validate SDP (DTLS fingerprint); create answer
+A -> H : signal { to=p2, kind=answer, sdp }
+H -> B : signal { from=p1, kind=answer, sdp }
+B -> B : validate + acceptAnswer
+A <--> B : direct DTLS-SRTP media (P2P, not via host)
+@enduml
+----
+
+The host is a signaling conduit only and stamps the authoritative sender id;
+relayed SDP is validated for a DTLS fingerprint before use. A malicious host
+could MITM guest↔guest media (R-7) — an accepted residual of the no-broker
+design (ADR-8), since the host is the trusted meeting organizer.

@@ -4,6 +4,7 @@
 
 export const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.nextcloud.com:443" }] };
 export const ICE_TIMEOUT_MS = 4000;
+export const MAX_CTRL = 200000; // cap an inbound ctrl message (anti-DoS), mirrors MAX_TOKEN
 
 // Non-trickle ICE: resolve on completion or a timeout so one payload carries all
 // candidates (a stalled gather still ships what it has).
@@ -49,11 +50,15 @@ export class PeerSession {
 
   _wireCtrl(ch) {
     this.ctrl = ch;
-    ch.addEventListener("message", (e) => this._onCtrl && this._onCtrl(JSON.parse(e.data)));
-    ch.addEventListener("open", () => {
-      for (const m of this._ctrlQueue) ch.send(m);
-      this._ctrlQueue = [];
+    ch.addEventListener("message", (e) => {
+      if (typeof e.data !== "string" || e.data.length > MAX_CTRL) return; // size cap
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }                // drop malformed
+      this._onCtrl && this._onCtrl(msg);
     });
+    const flush = () => { for (const m of this._ctrlQueue) ch.send(m); this._ctrlQueue = []; };
+    if (ch.readyState === "open") flush();          // the open event may have already fired
+    else ch.addEventListener("open", flush);
   }
 
   // Send a control object; queues until the channel opens.

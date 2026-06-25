@@ -351,7 +351,7 @@ Scenario: No US endpoint in the runtime path
 | ID | Requirement (EARS)
 | EARS-1 | When the host requests an invite, the system shall generate a CSPRNG UUIDv4 room id and a `#invite=` capability-URL. (SM-6, UC-1)
 | EARS-2 | When a capability token is loaded, the system shall validate it against the decode-time rules before changing any state, and shall reject an invalid token with a message. (BR-7, SYS-UC-2)
-| EARS-3 | While a peer connection already exists, if the actor requests a new invite or join, the system shall refuse it with a message. (BR-6, GD-1)
+| EARS-3 | While a bootstrap invite is already open (awaiting its answer), if the host requests another invite, the system shall refuse it with a message. (BR-6, GD-1)
 | EARS-4 | If ICE gathering does not complete within the timeout, the system shall emit the candidates gathered so far. (UC-1 3a)
 | EARS-5 | When applying a remote description, the system shall reject any SDP that does not carry a DTLS fingerprint, and shall not fall back to plaintext. (G-8, SM-7, VR-9)
 | EARS-6 | While a screen share is active, the system shall hide device selection and shall restore the current camera track when sharing stops. (UC-4)

@@ -204,7 +204,11 @@ scale, breaking the tie toward host-relayed (QG-1 top-ranked).
 
 *Consequences*: full sovereignty and zero dependencies; the host does one
 capability-URL exchange per guest (clunkier UX, accepted), and is a signaling
-single-point-of-failure *during setup* (not for established media). The host can
-see/forward guest↔guest SDP (a T-002-style position) but not media; DTLS
-fingerprint integrity (VR-9/M-1) still holds. Practically caps at a small mesh —
-the ~20 training case remains R-1/ADR-4. Realized in `src/app/mesh.js`.
+single-point-of-failure *during setup* (not for established media). Because the
+host relays guest↔guest SDP, a *malicious host* could rewrite the fingerprints
+and MITM guest↔guest media (R-7) — *accepted residual*, since the host is the
+trusted meeting organizer. Against a malicious *guest*, the relayed SDP is still
+validated (DTLS fingerprint, VR-9 on the mesh) and the host stamps the
+authoritative sender id, so a guest cannot downgrade encryption or impersonate a
+peer. Practically caps at a small mesh — the ~20 training case remains
+R-1/ADR-4. Realized in `src/app/mesh.js`.
