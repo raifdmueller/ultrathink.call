@@ -89,6 +89,31 @@ test("the host can kick a guest out of the mesh (#28)", async ({ browser }) => {
   await expect(g1.locator("#status")).toContainText("entfernt");
 });
 
+test("a late-joining guest inherits the muted state (#37)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: g1 } = await newPeer(browser);
+  const { page: g2 } = await newPeer(browser);
+
+  await host.goto("/");
+  await bootstrap(host, g1);                 // p1 connects
+  await tileHasStream(host, "p1");
+  await host.locator("#tile-p1").getByRole("button", { name: "Stumm" }).click(); // host mutes p1
+
+  await bootstrap(host, g2, { first: false }); // p2 joins AFTER the mute
+  await tileHasStream(g2, "p1");               // g2 forms its link to p1
+
+  const g2HearsP1 = () => g2.evaluate(() => {
+    const a = document.querySelector("#tile-p1 video")?.srcObject?.getAudioTracks()[0];
+    return a ? a.enabled : null;
+  });
+  // g2 inherited the muted set: p1's incoming audio is disabled for g2.
+  await expect.poll(g2HearsP1, { timeout: 15000 }).toBe(false);
+
+  // Unmuting p1 re-enables it for everyone, including the late joiner (idempotent).
+  await host.locator("#tile-p1").getByRole("button", { name: "Laut" }).click();
+  await expect.poll(g2HearsP1, { timeout: 15000 }).toBe(true);
+});
+
 test("background blur is offered only where the platform supports it (#25, fail-closed)", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");

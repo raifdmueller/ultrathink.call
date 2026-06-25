@@ -64,9 +64,9 @@ function moderationControls(peerId) {
   kick.textContent = "Entfernen";
   kick.addEventListener("click", () => mesh.kick(peerId));
   const mute = document.createElement("button");
-  let muted = false;
-  mute.textContent = "Stumm";
-  mute.addEventListener("click", () => { muted = !muted; mesh.setMuted(peerId, muted); mute.textContent = muted ? "Laut" : "Stumm"; });
+  const muteLabel = () => { mute.textContent = mesh.isMuted(peerId) ? "Laut" : "Stumm"; };
+  muteLabel(); // derive from authoritative mesh state, not a local flag (#37)
+  mute.addEventListener("click", () => { mesh.setMuted(peerId, !mesh.isMuted(peerId)); muteLabel(); });
   ctl.append(kick, mute);
   return ctl;
 }

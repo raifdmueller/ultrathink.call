@@ -470,6 +470,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-24 | When the actor self-mutes the microphone or camera, the system shall set the local track's `enabled` to false without renegotiation, indicate the muted state on the local tile, and re-apply it after a device switch. (UC-7, #47)
 | EARS-25 | When a participant sends a chat line, the system shall broadcast it over each connected peer's data channel, and shall render every received line as text — never HTML — attributed to the channel it arrived on. (UC-8, SYS-UC-7, BR-8, #48)
 | EARS-26 | When a received chat line exceeds the cap or is malformed, the system shall drop it without rendering. (SYS-UC-7, #48)
+| EARS-27 | The host shall keep an authoritative set of muted peers, replay it to a joining guest, and re-assert it on each fresh track, so a peer muted before a link exists is still silenced; the host UI shall derive its mute label from that set. (UC-5, #37)
 |===
 
 == Entities, states, and contracts complete the picture

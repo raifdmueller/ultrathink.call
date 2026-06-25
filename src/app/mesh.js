@@ -29,6 +29,7 @@ export class MeshSession {
     this.onStatus = onStatus || (() => {});
     this.onKicked = onKicked || (() => {}); // guest: the host evicted us
     this.onChat = onChat || (() => {});     // a chat line arrived (#48)
+    this._mutedIds = new Set();             // authoritative muted-peer set (#37)
     this.selfId = isHost ? "host" : null;
     this.peers = new Map();           // peerId -> PeerSession
     this._pendingHostSession = null;  // host: bootstrap session awaiting an answer
@@ -42,7 +43,10 @@ export class MeshSession {
     const session = new PeerSession({
       stream: this.stream,
       iceConfig: this.iceConfig,
-      onTrack: (s) => this.onPeerStream(session._peerId, s),
+      // Reconcile mute on every fresh track (#37): a peer muted before this link
+      // existed (or before its stream arrived) must come in silenced — and one
+      // unmuted in that window must come in audible. Idempotent in both directions.
+      onTrack: (s) => { session.setRemoteAudioEnabled(!this._mutedIds.has(session._peerId)); this.onPeerStream(session._peerId, s); },
       onState: (st) => {
         this.onStatus(`${session._peerId || "peer"}: ${st}`);
         // "disconnected" is transient and recovers on its own — only tear down on terminal states.
@@ -60,6 +64,7 @@ export class MeshSession {
     if (id && this.peers.has(id)) {
       this.peers.get(id).close();
       this.peers.delete(id);
+      this._mutedIds.delete(id); // don't leave a kicked/dropped peer in the muted set (#37)
       this.onPeerLeave(id);
     }
   }
@@ -81,7 +86,8 @@ export class MeshSession {
     this.peers.set(id, session);
     await session.acceptAnswer(answer); // answer arrived via the validated capability-URL path
     const others = [...this.peers.keys()].filter((k) => k !== id);
-    session.sendCtrl({ t: "welcome", id, peers: others });
+    // Replay the muted set so a late joiner silences already-muted peers (#37).
+    session.sendCtrl({ t: "welcome", id, peers: others, muted: [...this._mutedIds] });
   }
 
   // --- Guest: join via the host's offer --------------------------------------
@@ -125,9 +131,12 @@ export class MeshSession {
 
   setMuted(id, muted) {
     if (!this.isHost) return;
+    if (muted) this._mutedIds.add(id); else this._mutedIds.delete(id); // authoritative (#37)
     for (const s of this.peers.values()) s.sendCtrl({ t: "mute", id, muted });
     this.peers.get(id)?.setRemoteAudioEnabled(!muted); // apply at the host too
   }
+
+  isMuted(id) { return this._mutedIds.has(id); } // host UI derives the label from this (#37)
 
   // --- Chat (#48): direct peer-to-peer over the established mesh, no relay ----
   // Broadcast to every directly-connected peer. Returns the capped text the
@@ -170,6 +179,7 @@ export class MeshSession {
         if (msg.id === this.selfId) { this.onKicked(); this.close(); }
         else this._drop(msg.id);
       } else {
+        if (msg.muted) this._mutedIds.add(msg.id); else this._mutedIds.delete(msg.id); // track for late tracks (#37)
         this.peers.get(msg.id)?.setRemoteAudioEnabled(!msg.muted);
       }
       return;
@@ -179,6 +189,8 @@ export class MeshSession {
       if (session !== this._hostSession) return;               // welcome only from the host
       if (typeof msg.id !== "string" || !Array.isArray(msg.peers)) return;
       this.selfId = msg.id;
+      // Inherit the muted set so peers we connect to next come in silenced (#37).
+      if (Array.isArray(msg.muted)) for (const m of msg.muted) if (typeof m === "string") this._mutedIds.add(m);
       for (const pid of msg.peers) if (typeof pid === "string") this._guestConnectTo(pid);
     } else if (msg.t === "signal" && msg.to === this.selfId && typeof msg.from === "string") {
       if (msg.kind === "offer") {
