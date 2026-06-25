@@ -104,6 +104,20 @@ test("background blur is offered only where the platform supports it (#25, fail-
   await expect(page.locator("#blurToggle")).toHaveAttribute("title", /nicht unterstützt/);
 });
 
+test("invite offers exactly one of native-share or mailto, plus copy (#42)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  await host.goto("/");
+  await host.click("#startCam");
+  await host.click("#createInvite");
+  await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
+
+  await expect(host.locator("#copyInvite")).toBeVisible();   // copy is the universal fallback
+  // share XOR mailto — one distribution path is offered, never both, never a dead button.
+  const share = await host.locator("#shareInvite").isVisible();
+  const mail = await host.locator("#mailInvite").isVisible();
+  expect(share).not.toBe(mail);
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");

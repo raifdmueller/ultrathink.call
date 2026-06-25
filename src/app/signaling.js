@@ -1,8 +1,10 @@
-// Signaling Transport port (BB-4) + the Manual adapter (capability-URL + mailto).
+// Signaling Transport port (BB-4) + the Manual adapter (capability-URL, with
+// mailto and native share as distribution channels).
 //
 // The port contract is transport-agnostic: produce a capability token for a local
-// description, and consume one from untrusted text. Today there is one adapter —
-// the manual links below; the R2 broker adapter (issue #22) is the second one and
+// description, and consume one from untrusted text. Distribution of that token is
+// itself adapter-shaped — mailto: and the Web Share API (#42) are two channels of
+// the manual adapter; a future broker adapter (issue #22) would be a third, and
 // must not touch peer.js or codec.js.
 import { encodePayload, decodePayload, extractToken } from "./codec.js";
 
@@ -29,6 +31,17 @@ export async function parseIncoming(text) {
 export function mailtoLink(subject, intro, url) {
   const body = `${intro}\n\n${url}\n`;
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+// Native share adapter (#42): the OS share sheet routes the invite to any channel
+// the device has (WhatsApp, Signal, RCS, mail, AirDrop…). Infrastructure-free and
+// sovereign like mailto:, but broader — especially on mobile. `navigator` is
+// touched only inside these functions, so importing the module in Node stays safe.
+export function shareData(subject, intro, url) {
+  return { title: subject, text: intro, url };
+}
+export function canNativeShare() {
+  return typeof navigator !== "undefined" && typeof navigator.share === "function";
 }
 
 export function inviteTokenInHash() {

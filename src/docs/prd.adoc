@@ -250,8 +250,10 @@ call, and the app generates a `mailto:` link (subject plus body carrying the
 capability-URL) that the host's *own* mail client sends to the other
 participants. We send no mail ourselves; we only hand the user a pre-filled
 draft. The same link can equally be shared over any other channel (RCS,
-messenger). The security model and residual risks (R-3, R-9) are settled by the
-arc42 architecture (threat model 8.1).
+messenger) — and on platforms with the Web Share API the app offers the native
+OS share sheet directly (#42), with `mailto:` and clipboard copy as fallbacks.
+The security model and residual risks (R-3, R-9) are settled by the arc42
+architecture (threat model 8.1).
 
 == The 20-participant tension is the central risk
 
