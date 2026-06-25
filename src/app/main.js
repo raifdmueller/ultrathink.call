@@ -382,7 +382,32 @@ function clearLink(id) { const a = $(id); a.removeAttribute("href"); a.textConte
 const linkUrl = (id) => $(id).getAttribute("href") || "";
 
 const copyText = (text) => navigator.clipboard.writeText(text).then(() => status("In die Zwischenablage kopiert."));
-$("copyInvite").addEventListener("click", () => copyText(linkUrl("inviteLink")));
+
+// Copy the invite as a RICH link (#60): text/html so pasting into an HTML mail
+// editor gives a compact clickable link, plus a text/plain fallback (the full URL)
+// for plain-text targets. Falls back to plain copy where ClipboardItem is absent.
+const escAttr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+async function copyInviteRich() {
+  const url = linkUrl("inviteLink");
+  if (!url) return;
+  try {
+    if (window.ClipboardItem && navigator.clipboard.write) {
+      const html = `<a href="${escAttr(url)}">${INVITE_MSG.linkLabel}</a>`;
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([url], { type: "text/plain" }),
+      })]);
+      status("Als Link kopiert — füge ihn in eine E-Mail ein.");
+    } else {
+      await navigator.clipboard.writeText(url);
+      status("In die Zwischenablage kopiert.");
+    }
+  } catch {
+    try { await navigator.clipboard.writeText(url); status("In die Zwischenablage kopiert."); }
+    catch { status("Kopieren fehlgeschlagen."); }
+  }
+}
+$("copyInvite").addEventListener("click", copyInviteRich);
 $("copyAnswer").addEventListener("click", () => copyText($("answerCode").value));
 $("guardCopy").addEventListener("click", () => copyText($("guardCode").value));
 

@@ -236,6 +236,30 @@ test("chat renders messages as text, never HTML (#48, BR-8)", async ({ browser }
   expect(await guest.locator("#chatLog img").count()).toBe(0); // never interpreted as HTML
 });
 
+test("the invite copies as a rich HTML link plus a plain-text fallback (#60)", async ({ browser }) => {
+  const ctx = await browser.newContext({ permissions: ["camera", "microphone", "clipboard-read", "clipboard-write"] });
+  const page = await ctx.newPage();
+  await page.goto("/");
+  await page.click("#openCall");
+  await expect(page.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
+
+  await page.click("#copyInvite");
+  await expect(page.locator("#status")).toContainText("Als Link kopiert");
+
+  const { html, plain } = await page.evaluate(async () => {
+    const items = await navigator.clipboard.read();
+    let html = "", plain = "";
+    for (const it of items) {
+      if (it.types.includes("text/html")) html = await (await it.getType("text/html")).text();
+      if (it.types.includes("text/plain")) plain = await (await it.getType("text/plain")).text();
+    }
+    return { html, plain };
+  });
+  expect(html).toMatch(/<a href="[^"]*#invite=[^"]*">ultrathink\.call-Einladung<\/a>/); // compact link
+  expect(plain).toContain("#invite="); // full URL fallback
+  await ctx.close();
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");
