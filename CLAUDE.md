@@ -111,12 +111,45 @@ Quality assurance follows three layers:
 - Architecture review using ATAM (scenario-based tradeoff analysis against quality goals)
 - Use a different AI model or fresh session for reviews to avoid blind spots
 
+## Review Gate
+
+After every deliverable — PRD, Spec, arc42 architecture, and each implementation slice — run a review gate before the deliverable counts as done. Reviews run in a **context-less subagent**: a fresh session given only the artifact, the review rubric, and this contract — never the author's prior reasoning. This realizes the "different session to avoid blind spots" rule above.
+
+Run the reviews that fit the artifact; the rest activate as the relevant artifacts come into existence. ATAM needs an architecture with quality goals; code, security (OWASP), and maintainability reviews need code — so they do not apply to a pure requirements document.
+
+| After | Reviews | Drift check against |
+|---|---|---|
+| PRD | Requirements quality (completeness, MECE, testable success criteria, INVEST) + security/privacy goals captured | — |
+| Spec | Spec quality (Gherkin/EARS testability, use-case completeness) + security requirements | PRD |
+| arc42 | ATAM (scenario tradeoffs vs. quality goals) + security (OWASP at design) + maintainability (architecture) | PRD, Spec |
+| Code slice | Code review (Fagan) + security (OWASP) + maintainability (SOLID, DRY, code smells) | Spec, arc42 |
+
+Every gate also runs a **drift / traceability check** across PRD → Spec → arc42 → code. When a downstream artifact has drifted from an upstream change, reconcile it as part of the gate.
+
+Reviewers post their findings as **comments on the deliverable's PR**, each finding classified blocking (must-fix) or non-blocking.
+
+Then react autonomously in a **fix loop**: address findings with concrete changes, re-review, repeat. Terminate when no blocking findings remain, or after **3 rounds** — whichever comes first. Post any remaining non-blocking findings as a PR comment for the user instead of looping further.
+
+The loop is **fully autonomous, including product and architecture decisions** — it resolves tradeoffs itself rather than waiting. To keep autonomous decisions visible and reversible, record each one where it belongs (an inferred ADR with status "Accepted (inferred)" for architecture choices; an explicit note in the artifact otherwise) and call it out in the PR comment, so the user can override on review.
+
+### Deferred items become classified, tracked issues
+
+Nothing the gate defers is lost: when the fix loop ends, every deferred item of lasting consequence becomes a GitHub issue. Do not lump everything under "technical debt" — classify by type, consistent with the taxonomy this contract already carries (arc42 Chapter 11 separates Risks from Technical Debt; Backlog Management uses User Stories with MoSCoW):
+
+- `tech-debt` — a deliberate shortcut in code or architecture (Cunningham). References the arc42 Chapter 11 Technical-Debt entry and the Chapter 5 building block it burdens.
+- `risk` — a deferred risk. References its R-ID and the arc42 Chapter 11 Risk entry.
+- `adr-needed` — an open architecture or product decision (not debt). Becomes an ADR in the architecture phase.
+- `enhancement` — deferred scope or feature. A User Story with MoSCoW per Backlog Management.
+- `doc-quality` — a non-blocking artifact-quality finding deferred to a later pass.
+
+Each issue links back to its originating ID (finding, R-*, D-*, ADR) and the PR/commit where it was deferred, so traceability holds. Apply a materiality threshold: only items with lasting cost become issues; trivial nits are fixed in the next pass or noted in the PR, to avoid issue noise. Genuine open decisions are `adr-needed`, never `tech-debt`.
+
 ## Docs-as-Code
 
 Documentation follows Docs-as-Code according to Ralf D. Müller:
 - AsciiDoc as format, PlantUML for inline diagrams, built by docToolchain
 - Version-controlled, peer-reviewed, and built automatically
-- Plain English according to Strunk & White (or Gutes Deutsch nach Wolf Schneider)
+- Plain English according to Strunk & White (artifacts are English-only; see Writing Style)
 - Projects following this contract include the `dtcw` wrapper and `docToolchainConfig.groovy` so PlantUML / AsciiDoc actually render.
 
 ## Socratic Code Theory Recovery
@@ -166,7 +199,9 @@ Don't announce or walk through the method you're using — let it shape what you
 
 ## Writing Style
 
-Writing follows Gutes Deutsch nach Wolf Schneider (or Plain English according to Strunk & White).
+All project artifacts — documentation, specs, architecture, code comments, and GitHub issues/PRs (title and body) — are written in **English**, regardless of the conversation language. Conversation with the user may be in German.
+
+Writing follows Plain English according to Strunk & White.
 
 Additionally:
 - Technical terms stay in English (LLM, Prompt, Token, Spec, etc.)

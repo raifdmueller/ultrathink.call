@@ -1,0 +1,327 @@
+= Product Requirements Document — ultrathink.call
+:author: Ralf D. Müller
+:revdate: 2026-06-25
+:revnumber: 0.3 (Draft)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+[abstract]
+ultrathink.call is a sovereign, server-less video call: four peers meet in a
+browser mesh with screen sharing, no backend to operate and no login to build.
+The one decision that shapes everything is to stay infrastructure-free — it
+buys independence from US providers but caps the mesh at a handful of peers, so
+the 20-person training case becomes the central open tension. This PRD fixes
+the _why_ and the _what_; the Spec and the arc42 architecture carry the _how_.
+
+== European trainers depend on US video tools
+
+Trainers and coaches in Europe depend on US video services such as Zoom. Those
+who want independence find gaps in the obvious alternatives today:
+
+* *alfaview* did not throttle the bitrate under CPU load (heat); instead the
+  presenter's video dropped out entirely. A dropout instead of graceful
+  degradation is unacceptable in a training.
+* *Jitsi Meet* feels janky in use, and the virtual background is too weak. In a
+  training especially, participant privacy — their home surroundings on camera —
+  must be protected.
+
+The trainer has basic WebRTC knowledge but little experience, and wants to run
+no servers and build no login. The walking skeleton has already proven that a
+simple server-less P2P call is feasible in a static page. A product should grow
+from it — in thin slices.
+
+== Sovereignty, no infrastructure, no login drive the goals
+
+=== Goals
+
+[cols="1,4",options="header"]
+|===
+| ID | Goal
+| G-1 | *Digital sovereignty.* No runtime component depends on a US company —
+        not even STUN or signaling.
+| G-2 | *No own infrastructure.* No backend, no servers to operate or patch.
+        Delivered as a static page.
+| G-3 | *No login.* No accounts, no authentication to build or maintain.
+        (Derived constraint of G-2: a login would need a backend.)
+| G-4 | *Stable under load.* Video degrades in a controlled way
+        (resolution/bitrate) instead of dropping — the alfaview failure must not
+        recur.
+| G-5 | *Participant privacy.* Client-side background blur or replacement of
+        good quality, applied before the frame is encoded.
+| G-6 | *Modularity.* Signaling, STUN/ICE, and video processing sit behind ports
+        and are swappable — protection against new lock-in.
+| G-7 | *Incremental growth.* Thin slices: start at 2, then 4, vision up to ~20
+        for trainings.
+| G-8 | *Confidentiality by default.* All media and data channels are
+        DTLS-SRTP encrypted; there is no unencrypted fallback.
+| G-9 | *Data protection.* P2P with no backend means no controller-side storage;
+        no participant PII is persisted or sent to any server, and camera/mic
+        capture is consented.
+|===
+
+=== Non-Goals (for now)
+
+* Account or permission system, federated identities.
+* Cloud recording, server-side storage.
+* Native mobile apps.
+* More than ~20 participants; interop with SIP/Zoom/Teams.
+* An SFU operated by us — but R-1 may reopen this for the training case.
+
+== One host, many participants, four peers
+
+[cols="1,1,3",options="header"]
+|===
+| ID | Persona | Short description
+| P-1 | Trainer / Host | Gives trainings, convenes the weekly round. Solid tech
+        knowledge, low appetite for operations. Wants control and sovereignty.
+        Acts as host only in trainings; in the weekly round there is no host.
+| P-2 | Training Participant | Up to ~20 people, joining to learn. Want minimal
+        effort and their surroundings on camera protected.
+| P-3 | Peer (exchange round) | One of 4 regulars. Symmetric role — everyone
+        talks, sees, and shares as equals; no dedicated host.
+|===
+
+== Each deliverable moves the sovereignty goal
+
+The Impact Map connects the business goal with actors, desired behaviour
+changes (impacts), and concrete deliverables (D-*) — so that what gets built
+actually moves the goal.
+
+[plantuml,impact-map,svg]
+----
+@startmindmap
+* Independent of\nUS video services\n(sovereignty)
+** Trainer/Host (P-1)
+*** runs round + training\nwithout Zoom
+**** D-1: 2->4 mesh call
+**** D-2: capability-URL join
+**** D-5: training mode (~20)
+*** keeps control\nover the stack
+**** D-6: modular,\nswappable adapters
+**** D-9: sovereign\nSTUN/signaling endpoints
+** Participant (P-2)
+*** joins without login\nor install
+**** D-2: capability-URL join
+**** D-8: camera/mic selection
+*** protects their\nprivacy
+**** D-4: background blur
+** Peer (P-3)
+*** shares screen\nreliably
+**** D-3: screen sharing
+*** is not\ndropped
+**** D-7: adaptive bitrate
+@endmindmap
+----
+
+.Deliverable catalogue
+[cols="1,4",options="header"]
+|===
+| ID | Deliverable
+| D-1 | 2→4 peer mesh call (video + audio)
+| D-2 | Join via capability-URL, distributed through a generated `mailto:` link
+| D-3 | Screen sharing
+| D-4 | Client-side background blur/replacement
+| D-5 | Training mode (~20), asymmetric topology
+| D-6 | Modular, swappable adapters (signaling, ICE, video processing)
+| D-7 | Adaptive bitrate/resolution under load
+| D-8 | Camera/microphone selection
+| D-9 | Sovereign (non-US) STUN and signaling endpoints
+|===
+
+== The product grows in thin slices
+
+The backbone is the user journey (in journey order, not build order); below it
+sit the slices, each a working increment through all layers.
+
+.Backbone (journey order)
+[cols="1,1,1,1,1,1",options="header"]
+|===
+| Enter a room | Be seen/heard | See/hear others | Share screen | Protect privacy | Stay stable
+| Open room link | Pick camera/mic | Remote tiles | Share the screen | Blur background | Throttle under load
+|===
+
+.Releases (vertical slices)
+[cols="1,2,2,1",options="header"]
+|===
+| Release | Content | Deliverables | Status
+| R0 | Walking skeleton: 2 people, copy-paste signaling, screen sharing | D-3, D-1 (partial) | *done* (PR #1)
+| R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | next slice
+| R2 | 4-way mesh; automatic signaling over a sovereign broker; sovereign STUN; adapter seams | D-1, D-9, D-6 | planned
+| R3 | Background blur/replacement, client-side | D-4 | planned
+| R4 | Adaptive bitrate/resolution under CPU/bandwidth pressure | D-7 | planned
+| R5 | Training mode ~20 (asymmetric topology) | D-5 | vision, ADR-bound
+|===
+
+The *Must* set (see Scope) is complete at the end of *R2*. Releases R1 and R2
+each bundle a few capabilities for readability; the Spec may split them into
+smaller slices (e.g. R2 into "automatic sovereign signaling at 2 peers" and
+"4-way mesh") to keep each slice independent and small (INVEST).
+
+== Goals trace to deliverables, releases, and criteria
+
+[cols="1,2,1,1",options="header"]
+|===
+| Goal | Deliverable(s) | Release | Success criterion
+| G-1 sovereignty | D-9, D-6 | R2 | SM-2
+| G-2 no infrastructure | D-2 (no backend needed) | R0–R1 | SM-5
+| G-3 no login | D-2 | R1 | SM-5
+| G-4 stable under load | D-7 | R4 | SM-3
+| G-5 participant privacy | D-4 | R3 | SM-4
+| G-6 modularity | D-6 | R2 | SM-2
+| G-7 incremental growth | D-1, D-5 (all releases) | R0–R5 | SM-1
+| G-8 confidentiality | D-1 (DTLS-SRTP media) | R0+ | SM-7
+| G-9 data protection | D-2 (no server-side data) | R0+ | SM-8
+|===
+
+== Eight measurable criteria decide success
+
+Measurable, not phrased as adjectives.
+
+[cols="1,4",options="header"]
+|===
+| ID | Criterion
+| SM-1 | The weekly 4-person round runs entirely on ultrathink.call for 4
+         consecutive weeks, with no fallback to Zoom.
+| SM-2 | An audit of every runtime endpoint — STUN, signaling broker, static
+         host/CDN, DNS, and any third-party script or WASM model origin — shows
+         no operator under US jurisdiction (corporate ownership or operating
+         entity), checked against a named allowlist.
+| SM-3 | Under sustained CPU saturation (≥ 90 % for ≥ 120 s) the sender steps
+         resolution down through defined tiers but the stream stays connected at
+         ≥ 10 fps — the alfaview dropout does not reproduce.
+| SM-4 | With background blur on, a reviewer cannot read text or identify objects
+         in the background region in ≥ 9 of 10 sampled frames at 720p.
+| SM-5 | Joining a call takes < 60 s from opening a shared link — no install, no
+         login.
+| SM-6 | Every room ID is a CSPRNG-generated UUIDv4 (≥ 122 bits of entropy),
+         never sequential or time-derived.
+| SM-7 | Every media and data channel negotiates DTLS-SRTP; a connection that
+         cannot encrypt does not fall back to plaintext, it fails.
+| SM-8 | No participant PII (audio, video, IP, display name) is persisted by or
+         transmitted to any server we or a third party operate; a network audit
+         shows only peer-to-peer media and the minimal signaling/STUN exchange.
+|===
+
+== MoSCoW bounds the first increments
+
+[cols="1,4",options="header"]
+|===
+| Level | Scope
+| *Must* | 2→4 mesh (D-1), camera/mic selection (D-8), screen sharing (D-3),
+           capability-URL join (D-2), sovereign STUN (D-9). Complete at end of R2.
+| *Should* | Background blur (D-4), adaptive bitrate/resolution (D-7), host
+             moderation (admit/kick/mute) for trainings.
+| *Could* | Training broadcast mode ~20 (D-5), local recording, text chat —
+            none scheduled into a release yet; each needs its own slice before
+            it is committed.
+| *Won't (now)* | Login, native mobile apps, > 20 participants, a self-operated
+                  SFU.
+|===
+
+== Two strategic decisions shape the build
+
+=== Build, not adopt (build-vs-buy)
+
+Jitsi Meet is open source (Apache-2.0); EU-self-hosted it _would_ be sovereign.
+But self-hosting violates G-2 (infrastructure) and would carry the rejected
+janky UX and weak background. Decision: rethink the solution as server-less P2P,
+do not fork Jitsi. Rationale and alternatives belong in an arc42 ADR.
+
+=== Access without login: a capability-URL distributed via `mailto:`
+
+An email magic-link would need a sending and validation service — infrastructure
+(G-2) and a piece of security (G-3). Instead: a *capability-URL*
+`https://…/#room=<uuid>`. The UUID in the URL fragment _is_ the secret; whoever
+holds the link may enter. The room ID is a CSPRNG-generated UUIDv4 (SM-6), so it
+is not guessable or enumerable. No backend, no login. The URL fragment never
+leaves the browser, so it does not land in server logs.
+
+Distribution stays loosely coupled and infrastructure-free: the host opens the
+call, and the app generates a `mailto:` link (subject plus body carrying the
+capability-URL) that the host's *own* mail client sends to the other
+participants. We send no mail ourselves; we only hand the user a pre-filled
+draft. The same link can equally be shared over any other channel (RCS,
+messenger). The security model and residual risks (R-3, R-9) are settled by the
+arc42 architecture (threat model 8.1).
+
+== The 20-participant tension is the central risk
+
+Risks separate from technical debt; each carries probability/impact via a
+priority and a mitigation hook for the later threat model (T-IDs in chapter 8.1).
+
+[cols="1,1,4",options="header"]
+|===
+| ID | Priority | Description and handling
+| R-1 | high | *20 participants vs. mesh physics.* In a full mesh every peer
+        uploads `N-1` streams; ~20 exceeds home uplinks. The remedy, an SFU,
+        _is_ infrastructure (violates G-2). Tension between G-1/G-2 and G-7@20.
+        Options for later ADRs: (a) asymmetric broadcast topology (only the
+        trainer sends video, listeners audio-only if needed), (b) reconsider the
+        SFU non-goal with a self-operated EU SFU (sovereign but infrastructure),
+        (c) set a realistic maximum < 20. Decision deferred; does not block R0–R4.
+| R-2 | medium | *Availability/stability of sovereign STUN/broker*, plus broker
+        DoS, room squatting/spam, and malformed signaling. Mitigation: several
+        swappable EU/community endpoints (G-6); validate inbound signaling.
+| R-3 | medium | *Capability-URL leak, replay, and no revocation* → uninvited
+        join (no auth). The link is a bearer secret; once shared it cannot be
+        revoked without changing the room. Later mitigation: rotate room ID,
+        host admit (see R-9).
+| R-4 | medium | *Background-blur quality/performance* in the browser must beat
+        Jitsi, yet costs CPU — conflicts with G-4 on weak devices. On model-load
+        failure the camera fails closed (no raw frame transmitted).
+| R-5 | low | *Browser only*, no native mobile experience.
+| R-6 | medium | *IP/metadata disclosure.* STUN reveals each public IP, the
+        broker sees connection metadata, and in a mesh every peer learns every
+        other peer's IP. Orthogonal to jurisdictional sovereignty. Mitigation
+        hook: optional TURN relay to hide IPs for at-risk participants (note:
+        TURN reintroduces infrastructure — weigh against G-2).
+| R-7 | high | *Untrusted signaling broker (MITM).* A malicious or compromised
+        broker can tamper with SDP/ICE or attempt a man-in-the-middle on setup.
+        Mitigation hook: verify DTLS certificate fingerprints out-of-band or via
+        the capability channel.
+| R-8 | medium | *Screen-share oversharing.* Sharing a whole screen leaks
+        notifications, other windows, and tabs. Mitigation hook: prefer
+        single-window/tab share and a pre-share warning.
+| R-9 | medium | *Disruptive or gate-crashing participant.* A leaked/forwarded
+        link lets uninvited or disruptive parties join; with no host admit/kick/
+        mute a single bad actor can wreck a training. Host moderation is raised
+        to Should scope.
+| R-10 | medium | *Supply-chain/static-host integrity.* The product is a static
+        page plus client-side JS/WASM (blur model); a compromised host, CDN, or
+        dependency can defeat every client-side privacy property. Mitigation
+        hook: Subresource Integrity, pinned dependencies, CSP, Trusted Types.
+|===
+
+== Open questions are handed off by role
+
+*Product Owner*
+
+* R5/training: is audio-only acceptable for listeners if that is what makes ~20
+  feasible at all? Or must every listener send video?
+* Does local recording belong in scope later? If so it requires explicit
+  all-party recording consent (legally required in much of the EU) and is out of
+  scope until that consent flow is specified.
+
+*Architect*
+
+* R-1: which topology for ~20 — asymmetric broadcast vs. own EU SFU? Decides
+  compatibility with G-2.
+* Which sovereign STUN/signaling broker (EU/community) becomes the default
+  (R-2, D-9)?
+* R-6: is a TURN relay offered for IP privacy, accepting the infrastructure cost?
+
+*Developer*
+
+* Which browser API for background segmentation (e.g. Insertable Streams + WASM
+  model) satisfies G-5 without violating G-4?
+
+*Domain Expert (Trainer)*
+
+* What is the realistic upper bound of real training groups — 12, 16, 20?
+
+*Operations*
+
+* No open questions — operations are explicitly excluded by G-2 (static
+  delivery).
