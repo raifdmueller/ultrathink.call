@@ -15,6 +15,10 @@
 // A future vendored-model adapter (#26) implements the same shape and replaces
 // this one without touching peer.js or main.js.
 
+// Shared so the adapter and the UI tooltip say the same thing about an
+// unsupported platform.
+export const UNSUPPORTED_MSG = "Hintergrund-Blur wird von diesem Gerät/Browser nicht unterstützt.";
+
 // Pure: does this track's capabilities advertise native background blur? Kept
 // free of side effects so it is Node-testable with a faked track.
 export function supportsBlur(track) {
@@ -27,13 +31,22 @@ export class NativeBlurProcessor {
 
   get supported() { return supportsBlur(this.track); }
 
-  // Request the platform blur on/off for this track. Resolves to the state that
-  // is now actually in effect. Rejects if the platform cannot honour it, so the
-  // caller fails closed (revert the toggle, warn) rather than streaming an
-  // unblurred frame under a "blur on" label.
+  // Request the platform blur on/off for this track, and confirm it engaged.
+  // Resolves to the state now actually in effect; rejects otherwise, so the caller
+  // fails closed (revert the toggle, warn) rather than streaming an unblurred frame
+  // under a "blur on" label.
+  //
+  // Critical: `backgroundBlur` is an *advanced* constraint, which the spec treats
+  // as best-effort — applyConstraints resolves even when the platform silently
+  // ignored it. So a resolve is not proof. When turning blur ON we read it back
+  // via getSettings() and reject unless the platform confirms it is on. (Turning
+  // OFF needs no such proof: "no blur" is the safe state.)
   async setEnabled(on) {
-    if (!this.supported) throw new Error("Hintergrund-Blur wird von diesem Gerät/Browser nicht unterstützt.");
+    if (!this.supported) throw new Error(UNSUPPORTED_MSG);
     await this.track.applyConstraints({ advanced: [{ backgroundBlur: on }] });
+    if (on && this.track.getSettings?.().backgroundBlur !== true) {
+      throw new Error("Hintergrund-Blur konnte nicht bestätigt werden.");
+    }
     return on;
   }
 }

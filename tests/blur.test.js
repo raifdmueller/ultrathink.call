@@ -4,9 +4,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { supportsBlur, NativeBlurProcessor } from "../src/app/blur.js";
 
-const trackWith = (caps, applyImpl) => ({
+// `settings` is what getSettings() reports back after applyConstraints — the
+// read-back the adapter uses to confirm blur actually engaged.
+const trackWith = (caps, applyImpl, settings = { backgroundBlur: true }) => ({
   getCapabilities: () => caps,
   applyConstraints: applyImpl || (async () => {}),
+  getSettings: () => settings,
 });
 
 describe("supportsBlur (#25)", () => {
@@ -44,5 +47,17 @@ describe("NativeBlurProcessor (#25)", () => {
     const apply = vi.fn(async () => { throw new Error("OverconstrainedError"); });
     const p = new NativeBlurProcessor(trackWith({ backgroundBlur: [true] }, apply));
     await expect(p.setEnabled(true)).rejects.toThrow();
+  });
+
+  it("fails closed when applyConstraints resolves but blur did not engage (best-effort advanced constraint)", async () => {
+    // The platform advertised the capability and applyConstraints resolved, but
+    // getSettings shows blur is still off — must NOT claim blur is on.
+    const p = new NativeBlurProcessor(trackWith({ backgroundBlur: [true] }, async () => {}, { backgroundBlur: false }));
+    await expect(p.setEnabled(true)).rejects.toThrow(/nicht bestätigt/);
+  });
+
+  it("turning blur OFF needs no read-back confirmation (off is the safe state)", async () => {
+    const p = new NativeBlurProcessor(trackWith({ backgroundBlur: [true] }, async () => {}, { backgroundBlur: false }));
+    await expect(p.setEnabled(false)).resolves.toBe(false);
   });
 });

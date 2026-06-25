@@ -4,7 +4,7 @@
 import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
 import { AdaptController, TIERS, SAMPLE_INTERVAL_MS } from "./adapt.js";
-import { NativeBlurProcessor, supportsBlur } from "./blur.js";
+import { NativeBlurProcessor, supportsBlur, UNSUPPORTED_MSG } from "./blur.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
@@ -184,7 +184,7 @@ async function switchTrack(kind, deviceId) {
       refreshBlurAvailability();
       if (blurOn) {
         try { await applyBlur(true); }
-        catch { blurOn = false; $("blurToggle").textContent = "Hintergrund verwischen"; status("Blur auf der neuen Kamera nicht verfügbar — aus."); }
+        catch { revertBlur("Blur auf der neuen Kamera nicht verfügbar — aus."); }
       }
     }
   } catch (err) {
@@ -197,16 +197,29 @@ $("micSelect").addEventListener("change", () => switchTrack("audio", $("micSelec
 // --- Background blur (#25, BB-9): native, fail-closed -----------------------------
 // We only ever offer blur the platform can actually deliver, and we never report
 // "blur on" unless the platform confirmed it (fail-closed, arc42 8.5).
+const BLUR_OFF_LABEL = "Hintergrund verwischen";
+const BLUR_ON_LABEL = "Hintergrund anzeigen";
+
 function refreshBlurAvailability() {
-  const ok = !!camTrack && supportsBlur(camTrack);
+  // A screen share owns the outgoing video; blur applies to the camera, so the
+  // toggle is meaningless mid-share.
+  const ok = !sharing && !!camTrack && supportsBlur(camTrack);
   $("blurToggle").disabled = !ok;
-  $("blurToggle").title = ok ? "" : "Hintergrund-Blur wird von diesem Gerät/Browser nicht unterstützt.";
+  $("blurToggle").title = ok ? "" : UNSUPPORTED_MSG;
 }
 
 async function applyBlur(on) {
-  await new NativeBlurProcessor(camTrack).setEnabled(on); // throws → caller fails closed
-  blurOn = on;
-  $("blurToggle").textContent = on ? "Hintergrund anzeigen" : "Hintergrund verwischen";
+  // setEnabled confirms the effect engaged (read-back) or throws → we fail closed.
+  blurOn = await new NativeBlurProcessor(camTrack).setEnabled(on);
+  $("blurToggle").textContent = blurOn ? BLUR_ON_LABEL : BLUR_OFF_LABEL;
+}
+
+// Fail closed: forget the blur claim, reset the label, warn. One place so the
+// toggle, the device switch, and the share-restore paths cannot drift.
+function revertBlur(msg) {
+  blurOn = false;
+  $("blurToggle").textContent = BLUR_OFF_LABEL;
+  status(msg);
 }
 
 $("blurToggle").addEventListener("click", async () => {
@@ -214,9 +227,7 @@ $("blurToggle").addEventListener("click", async () => {
     await applyBlur(!blurOn);
     status(blurOn ? "Hintergrund wird verwischt." : "Hintergrund-Blur aus.");
   } catch (err) {
-    blurOn = false;                                       // never claim a blur we could not set
-    $("blurToggle").textContent = "Hintergrund verwischen";
-    status("Hintergrund-Blur fehlgeschlagen: " + err.message);
+    revertBlur("Hintergrund-Blur fehlgeschlagen: " + err.message);
   }
 });
 
@@ -312,6 +323,7 @@ $("shareScreen").addEventListener("click", async () => {
     $("localVideo").srcObject = display;
     show("deviceRow", false);
     $("shareScreen").disabled = true; $("stopShare").disabled = false;
+    refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
     screenTrack.addEventListener("ended", restoreCamera);
   } catch (err) {
@@ -327,6 +339,13 @@ async function restoreCamera() {
   show("deviceRow", true);
   $("shareScreen").disabled = false; $("stopShare").disabled = true;
   status("Zurück auf Kamera.");
+  // The restored camera frame is unblurred until re-applied; re-assert the blur
+  // state fail-closed so we never show the camera blurred when it is not (#25).
+  refreshBlurAvailability();
+  if (blurOn) {
+    try { await applyBlur(true); }
+    catch { revertBlur("Blur nach dem Teilen nicht wiederhergestellt — aus."); }
+  }
 }
 
 // --- On load: auto-detect an invite in the URL -----------------------------------
