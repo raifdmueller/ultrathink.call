@@ -30,6 +30,8 @@
     .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
     .tile span { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px;
       background: rgba(0,0,0,.6); font-size: .75rem; }
+    .tile .muteflag { left: auto; right: 6px; bottom: 6px; background: rgba(180,40,40,.85); }
+    .tile .camflag { left: 6px; top: 6px; bottom: auto; background: rgba(180,40,40,.85); }
     .modctl { position: absolute; top: 6px; right: 6px; display: flex; gap: .25rem; }
     .modctl button { padding: 2px 6px; font-size: .68rem; background: rgba(20,22,26,.85); }
     section.card { border: 1px solid #2b313a; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; background: #181b20; }
@@ -71,7 +73,12 @@
   </p>
 
   <div class="videos hidden" id="videos">
-    <div class="tile"><video id="localVideo" autoplay playsinline muted></video><span>Du</span></div>
+    <div class="tile">
+      <video id="localVideo" autoplay playsinline muted></video>
+      <span>Du</span>
+      <span class="muteflag hidden" id="localMicFlag">🔇 stumm</span>
+      <span class="camflag hidden" id="localCamFlag">Kamera aus</span>
+    </div>
     <!-- one tile per remote peer is injected here -->
   </div>
 
@@ -139,6 +146,8 @@
   <!-- In-call controls: shown once media is live -------------------------------->
   <section class="card hidden" id="callControls">
     <div class="controls">
+      <button id="muteMic" class="secondary">Mikro aus</button>
+      <button id="muteCam" class="secondary">Kamera aus</button>
       <button id="shareScreen" class="secondary">Bildschirm teilen</button>
       <button id="stopShare" class="secondary hidden">Teilen beenden</button>
       <button id="blurToggle" class="secondary" disabled>Hintergrund verwischen</button>
