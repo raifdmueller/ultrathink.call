@@ -113,8 +113,21 @@ export class MeshSession {
 
   // Control protocol: `welcome` (host→new guest: your id + peers to connect to)
   // and `signal` (offer/answer, relayed by the host, routed by `to`).
+  // --- Host moderation (only the host may issue these) -----------------------
+  kick(id) {
+    if (!this.isHost) return;
+    for (const s of this.peers.values()) s.sendCtrl({ t: "kick", id });
+    this._drop(id);
+  }
+
+  setMuted(id, muted) {
+    if (!this.isHost) return;
+    for (const s of this.peers.values()) s.sendCtrl({ t: "mute", id, muted });
+    this.peers.get(id)?.setRemoteAudioEnabled(!muted); // apply at the host too
+  }
+
   _handleCtrl(session, msg) {
-    if (!msg || (msg.t !== "welcome" && msg.t !== "signal")) return;
+    if (!msg || typeof msg.t !== "string") return;
 
     if (this.isHost) {
       // Conduit only. The authoritative sender is the channel it arrived on —
@@ -123,6 +136,13 @@ export class MeshSession {
         const target = this.peers.get(msg.to);
         if (target) target.sendCtrl({ ...msg, from: session._peerId });
       }
+      return;
+    }
+
+    // Guest: moderation is honored only from the host channel.
+    if ((msg.t === "kick" || msg.t === "mute") && session === this._hostSession && typeof msg.id === "string") {
+      if (msg.t === "kick") this._drop(msg.id);
+      else this.peers.get(msg.id)?.setRemoteAudioEnabled(!msg.muted);
       return;
     }
 

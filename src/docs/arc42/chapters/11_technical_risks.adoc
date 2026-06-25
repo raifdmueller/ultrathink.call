@@ -19,11 +19,11 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | R-1 | Med | High | *High* | Topology decision deferred to ADR-4 / issue #3; does not block R0–R4. The central tension between G-1/G-2 and 20-peer scale.
 | R-12 | Med | High | *High* | No TURN (TC-7): behind symmetric/CGNAT NAT the call cannot establish (Runtime Scenario 2), directly threatening SM-1 (the round runs with no Zoom fallback). Mitigation: TURN relay deferred (issue #4) — adding it trades against G-2.
 | R-7 | Low | High | *High* | Signaling-path tampering. Host↔guest: M-1 (DTLS-fingerprint check, VR-9) + fingerprint over the capability channel (ADR-2). Mesh guest↔guest: relayed SDP is validated against a malicious *guest* (VR-9 on the mesh, authoritative `from`), but a malicious *host* could MITM guest↔guest media — *accepted residual* (trusted host, ADR-8).
-| R-3 | Med | Med | *Med* | M-4 (token is the bearer secret, CSPRNG room id, advisory share-carefully); single-use/expiring tokens deferred. *Same root cause as R-9* (a leaked link with no moderation) — treat as one bearer-secret-without-moderation cluster.
+| R-3 | Low | Med | *Low* | M-4 (token is the bearer secret, CSPRNG room id, advisory share-carefully) + M-9 (60-min invite expiry, #29) bounds the replay window; single-use revocation still deferred. *Reduced* from Med: an expired forwarded link no longer admits, and M-8 moderation (R-9) now evicts a gate-crasher who slips in within the window.
 | R-10 | Low | High | *Med* | One step removed (needs host/CDN/dependency compromise first). M-2 (CSP, no external scripts); SRI + Trusted Types deferred — required before the R3 WASM blur model ships.
 | R-2 | Low | Med | *Low* | D-9 done: a sovereign DE STUN set with fallbacks (Nextcloud, sipgate, 1&1) + S-5 swappable endpoints. Residual is endpoint uptime (operational).
 | R-6 | High | Low | *Med* | Disclosed (EARS-10, T-005b); TURN relay is the deferred mitigation (issue #4) — adding it trades against G-2.
-| R-9 | Med | Med | *Med* | Host admit/kick/mute raised to Should scope; not yet built (will close T-009). Clustered with R-3.
+| R-9 | Low | Med | *Low* | *Mitigated* by M-8 (#28): the host can kick or mute any peer over its `ctrl` channels, closing T-009's disruption path. Residual: no *admit* gate (a peer with a valid, unexpired link still joins before it can be kicked) — clustered with R-3, bounded by M-9 expiry.
 | R-4 | Med | Med | *Med* | Fail-closed blur on model-load failure; bounded by QS-5; perf-vs-CPU watched against QG-3.
 | R-8 | Low | Med | *Low* | M-6 (prefer single window + pre-share warning).
 | R-13 | Med | Low | *Low* | Zero-egress (G-9) means no remote diagnostics; field failures are user-reported only. Accepted trade from ADR-1; no mitigation planned.

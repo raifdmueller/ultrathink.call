@@ -2,7 +2,9 @@
 // bootstraps each guest with a capability-URL, then the mesh forms automatically
 // (ADR-8, no broker). One video tile per peer; device/screen changes apply to all.
 import { MeshSession } from "./mesh.js";
-import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash } from "./signaling.js";
+import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
+
+const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
@@ -31,6 +33,20 @@ function setTile(peerId, stream) {
     const label = document.createElement("span");
     label.textContent = peerId === "host" ? "Host" : "Gast " + peerId.replace(/^p/, "");
     tile.append(v, label);
+    // Host moderation controls per guest tile (#28).
+    if (mesh?.isHost && peerId !== "host") {
+      const ctl = document.createElement("div");
+      ctl.className = "modctl";
+      const kick = document.createElement("button");
+      kick.textContent = "Entfernen";
+      kick.addEventListener("click", () => mesh.kick(peerId));
+      const mute = document.createElement("button");
+      let muted = false;
+      mute.textContent = "Stumm";
+      mute.addEventListener("click", () => { muted = !muted; mesh.setMuted(peerId, muted); mute.textContent = muted ? "Laut" : "Stumm"; });
+      ctl.append(kick, mute);
+      tile.append(ctl);
+    }
     $("videos").appendChild(tile);
   }
   tile.querySelector("video").srcObject = stream;
@@ -127,7 +143,7 @@ $("createInvite").addEventListener("click", async () => {
     if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
     ensureMesh(true);
     const offer = await mesh.createBootstrapOffer();
-    $("inviteUrl").value = await buildCapabilityUrl("offer", roomId, offer);
+    $("inviteUrl").value = await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS);
     $("copyInvite").disabled = false; $("mailInvite").disabled = false;
     bootstrapPending = true;
     status("Einladung erstellt. Schick den Link und füge unten die Antwort ein.");
@@ -145,6 +161,7 @@ $("loadIncoming").addEventListener("click", async () => {
     const payload = await parseIncoming(text);
     if (payload.kind === "offer") {
       if (mesh && mesh.isHost) { status("Du bist Host — du kannst nicht deiner eigenen Einladung beitreten."); return; }
+      if (isExpired(payload)) { status("Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link."); return; }
       pendingOffer = payload.sdp; roomId = payload.room; setRoom();
       show("joinAnswer", localStream != null);
       status(localStream
@@ -199,6 +216,8 @@ $("shareScreen").addEventListener("click", async () => {
     status("Bildschirm teilen wird auf diesem Browser/Gerät nicht unterstützt (z. B. mobil).");
     return;
   }
+  // Pre-share warning (#30 / R-8): remind before any frame is sent.
+  if (!confirm("Teile nur das gewünschte Fenster — andere Fenster und Benachrichtigungen könnten sichtbar werden. Fortfahren?")) return;
   try {
     const display = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
     const screenTrack = display.getVideoTracks()[0];
@@ -229,6 +248,7 @@ async function restoreCamera() {
   if (!inviteTokenInHash()) return;
   $("incomingIn").value = location.hash;
   parseIncoming(location.hash).then((p) => {
+    if (isExpired(p)) { status("Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link."); return; }
     pendingOffer = p.sdp; roomId = p.room; setRoom();
     if (localStream) show("joinAnswer", true);
     status("Du wurdest eingeladen. Starte Kamera + Mikro, dann „Beitreten & Antwort erzeugen“.");

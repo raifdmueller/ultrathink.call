@@ -8,11 +8,16 @@ import { encodePayload, decodePayload, extractToken } from "./codec.js";
 
 const baseUrl = () => location.origin + location.pathname;
 
-export async function buildCapabilityUrl(kind, room, sdp) {
-  const token = await encodePayload({ v: 1, room, kind, sdp });
-  const fragment = kind === "offer" ? "invite" : "answer"; // payload kind vs URL fragment name
+export async function buildCapabilityUrl(kind, room, sdp, exp) {
+  const payload = { v: 1, room, kind, sdp };
+  if (exp) payload.exp = exp;                                // optional expiry (epoch ms)
+  const token = await encodePayload(payload);
+  const fragment = kind === "offer" ? "invite" : "answer";  // payload kind vs URL fragment name
   return `${baseUrl()}#${fragment}=${token}`;
 }
+
+// True if an invite payload carries an expiry that has passed.
+export const isExpired = (payload) => typeof payload.exp === "number" && Date.now() > payload.exp;
 
 export async function parseIncoming(text) {
   return decodePayload(extractToken(text));
