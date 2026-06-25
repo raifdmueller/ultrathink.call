@@ -11,7 +11,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-1 | Server-less peer-to-peer, no own infrastructure | Accepted
 | ADR-2 | Capability-URL signaling (SDP-in-link + `mailto:`) | Accepted
 | ADR-3 | Sovereign (non-US) STUN; no Google | Accepted
-| ADR-4 | Topology for the ~20-participant training case | Proposed (open — issue #3)
+| ADR-4 | Topology for the ~20-participant training case | Accepted (inferred — issue #3)
 | ADR-5 | Ports and adapters for external dependencies | Accepted
 | ADR-6 | Static host: GitHub Pages interim, target Codeberg Pages (DE) | Accepted
 | ADR-7 | ES modules + dev-only test tooling (no app build) | Accepted (inferred)
@@ -88,23 +88,41 @@ Uptime monitoring of the chosen endpoints stays operational.
 
 === ADR-4 Topology for the ~20-participant training case
 
-*Status*: Proposed (open). *Context*: a full mesh uploads `N-1` streams per peer
-and cannot reach ~20 on home uplinks; an SFU is infrastructure (conflicts with
-G-2). *Decision*: deferred — recorded as open, tracked in issue #3. Pugh cells
-that need team judgment are marked `?` rather than guessed.
+*Status*: Accepted (inferred). *Context*: a full mesh uploads `N-1` streams per
+peer, so at ~20 every home uplink dies. The textbook fix is an SFU — but an SFU
+is infrastructure to operate and a non-US-relay trust question, which G-2 (no own
+infrastructure) and G-1 (sovereignty) rule out. The remaining infra-free lever is
+*who sends video*. *Decision*: **asymmetric broadcast** — in training mode only
+the presenter(s) send video; participants are audio-only by default and may be
+promoted to send video one at a time (raise-hand). This keeps the zero-infra P2P
+posture. It does *not* make the mesh scale arbitrarily: the presenter still
+uploads one video copy per participant, so the realistic ceiling is the
+presenter's uplink — accepted as a **cap** (PRD option c folded in), not a promise
+of 20-with-everyone-on-video. True 20-with-video for all needs the deferred
+relay/SFU infra decision (ADR-bound, ties to the TURN question #4).
 
 [cols="2,1,1,1",options="header"]
 |===
-| Criterion | Full mesh — datum | Asymmetric broadcast | Self-hosted EU SFU
+| Criterion | Full mesh — datum | Asymmetric broadcast (chosen) | Self-hosted EU SFU
 | Sovereignty (G-1) | 0 | 0 | 0
 | Zero-ops (G-2) | 0 | 0 | -1
-| Reaches ~20 | 0 | +1 | +1
-| UX symmetry | 0 | -1 | ?
-| *Sum* | *0* | *0* | *?*
+| Reaches ~20 (audio + 1 presenter video) | 0 | +1 | +1
+| UX symmetry (everyone on video) | 0 | -1 | +1
+| No new trust/infra | 0 | +1 | -1
+| *Sum* | *0* | *+1* | *0*
 |===
 
-*Consequences*: until decided, R5 (training) is blocked; creates/keeps *R-1* open.
-The decision will add or accept a risk explicitly when made.
+Asymmetric broadcast wins on the sum and, decisively, on the two top-ranked goals
+(QG-1 sovereignty, QG-2 zero-ops) where the SFU pays `-1`. The cost it accepts is
+UX symmetry — in a training, participants are not all on camera at once. For the
+owner's actual use (one trainer, ~20 listeners) that matches the real format.
+
+*Consequences*: chosen for sovereignty + zero-ops at the price of symmetric video.
+*Reduces R-1* (the topology tension now has a decided, infra-free answer) but does
+not close it: the presenter-uplink cap is a new accepted limitation, *R-15*. The
+implementation (issue #31, MoSCoW *Could*) adds presenter/participant roles and
+per-role send policy to BB-7; until built, R5 stays vision. A later relay/SFU
+decision (#4) could lift R-15 if the owner ever accepts that infrastructure.
 
 === ADR-5 Ports and adapters for external dependencies
 
