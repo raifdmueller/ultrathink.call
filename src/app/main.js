@@ -344,26 +344,29 @@ function listenForAnswers() {
   answerChannel.onmessage = async (e) => {
     if (e.data?.t !== "answer" || !mesh?.isHost || !bootstrapPending) return;
     await ingestIncoming(e.data.url);              // validates + applies (same path as paste)
-    if (!bootstrapPending) answerChannel.postMessage({ t: "answer-ack" }); // accepted
+    if (!bootstrapPending) answerChannel.postMessage({ t: "answer-ack", nonce: e.data.nonce }); // accepted; echo the nonce
   };
 }
 
 // On a freshly-opened #answer= tab: hand the answer to a call tab on this device;
 // if none acks in time, fall back to the manual guard (#46) — never a broken join.
+// A nonce binds the ack to our request (a forged bare ack can't fake success); a
+// `settled` latch means whichever path wins first is final (no late flip-flop).
 function forwardAnswer() {
   const answerUrl = location.href;
+  const nonce = crypto.randomUUID();
   const ch = new BroadcastChannel(ANSWER_CHANNEL);
-  let acked = false;
+  let settled = false;
   ch.onmessage = (e) => {
-    if (e.data?.t !== "answer-ack" || acked) return;
-    acked = true;
+    if (settled || e.data?.t !== "answer-ack" || e.data.nonce !== nonce) return;
+    settled = true;
     showStep("none"); show("answerDone", true);
     status("Antwort übernommen — du kannst diesen Tab schließen.");
-    setTimeout(() => { try { window.close(); } catch { /* user-opened tab can't self-close */ } }, 1500);
   };
-  ch.postMessage({ t: "answer", url: answerUrl });
+  ch.postMessage({ t: "answer", url: answerUrl, nonce });
   setTimeout(() => {
-    if (acked) return;
+    if (settled) return;
+    settled = true; ch.close(); // commit the fallback; ignore any later ack
     $("guardCode").value = answerUrl;
     showStep("guard");
     status("Kein offener Call-Tab gefunden — kopiere die Antwort und füge sie im Call-Tab ein.");
@@ -430,7 +433,7 @@ async function copyRich(url, label) {
   if (!url) return;
   try {
     if (window.ClipboardItem && navigator.clipboard.write) {
-      const html = `<a href="${escAttr(url)}">${label}</a>`;
+      const html = `<a href="${escAttr(url)}">${escAttr(label)}</a>`;
       await navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([html], { type: "text/html" }),
         "text/plain": new Blob([url], { type: "text/plain" }),
