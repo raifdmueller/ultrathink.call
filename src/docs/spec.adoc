@@ -38,7 +38,7 @@ guest↔guest signaling; the use cases below describe the host/guest pair and ap
 per peer. The ~20 training topology (D-5/R5) extends this and remains open
 (ADR-4).
 
-== Ten rules govern access, encryption, sovereignty, and moderation
+== Eleven rules govern access, encryption, sovereignty, moderation, and privacy
 
 [cols="1,4",options="header"]
 |===
@@ -53,9 +53,10 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 | BR-8 | Untrusted token text is treated as data only — never evaluated, never inserted as HTML — and enters the System solely through SYS-UC-2.
 | BR-9 | Only the Host may moderate (kick or mute a peer). Moderation commands travel over the Host's `ctrl` channels; a Guest acts on a `kick`/`mute` only when it arrives from the Host session, never from a relayed peer (M-8, closes T-009).
 | BR-10 | An invite token may carry an expiry (`exp`, epoch ms); the System sets a default 60-minute TTL. A token whose `exp` has passed is refused on load with a message and no state change (M-9). Expiry bounds replay; it is not single-use.
+| BR-11 | Background blur is offered only where the platform can deliver it natively (ADR-9); the System never reports blur active unless the platform confirmed it. On any failure it reverts the toggle and warns, so an unblurred frame is never presented as blurred (fail-closed). No segmentation model is fetched, so the CSP and sovereignty (G-1) are unchanged.
 |===
 
-== Five use cases cover hosting, joining, devices, sharing, and moderation
+== Six use cases cover hosting, joining, devices, sharing, moderation, and blur
 
 === UC-1 Host a call
 
@@ -154,6 +155,25 @@ per peer. The ~20 training topology (D-5/R5) extends this and remains open
 .Extensions
 * 1a. A Guest tries to issue a moderation command → ignored: only the Host's session is authoritative (BR-9).
 * 2a. A relayed peer forges a `kick`/`mute` not from the Host → ignored (BR-9).
+
+=== UC-6 Blur the background
+
+* *Primary actor*: Host or Guest
+* *Goal*: Hide the surroundings on camera, so the background is not visible to others.
+* *Trigger*: The actor toggles background blur.
+* *Preconditions*: A running local camera whose platform exposes native background blur.
+* *Postconditions*: The outgoing (and locally previewed) camera video has the background blurred by the platform, until toggled off.
+
+.Main success scenario
+. System detects native blur support and enables the toggle (BR-11).
+. Actor toggles blur on; System applies the platform's `backgroundBlur` to the camera track.
+. The background is obscured before encoding; every peer receives the blurred track.
+. Actor toggles blur off; System removes the effect.
+
+.Extensions
+* 1a. The platform has no native blur → the toggle stays disabled with an explanatory tooltip (BR-11, R-14).
+* 2a. Applying blur fails → System reverts the toggle and warns; no unblurred frame is presented as blurred (fail-closed, BR-11).
+* 3a. The actor switches to a camera that cannot blur while blur is on → blur is turned off with a warning (BR-11).
 
 == Each interface has a system use case
 
@@ -401,6 +421,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-15 | When the host requests an invite, the system shall stamp a 60-minute expiry; and when loading a token whose expiry has passed, the system shall refuse it with a message and no state change. (BR-10, VR-10)
 | EARS-16 | While a call is running, when the browser reports the outgoing video as CPU- or bandwidth-limited for a sustained interval, the system shall step the local encoding down through fixed tiers, and shall not drop below 10 fps. (SM-3, QS-3, BB-8)
 | EARS-17 | While the encoding is stepped down, when the limitation clears for a sustained interval, the system shall step the encoding back up one tier at a time. (QS-3, BB-8)
+| EARS-18 | Where the platform exposes native background blur, the system shall offer a blur toggle and apply it to the camera track; elsewhere it shall disable the toggle and shall not present an unblurred frame as blurred. (BR-11, SM-4, QS-5)
 |===
 
 == Entities, states, and contracts complete the picture
@@ -533,6 +554,7 @@ not authorization.
 | VR-10, EARS-15 | arc42 M-9 invite expiry (R-3 replay window bounded)
 | EARS-13, EARS-14 | arc42 M-8 host moderation (T-009 / R-9)
 | EARS-16, EARS-17 | arc42 BB-8 adaptive media (SM-3, QS-3, G-4/QG-3)
+| EARS-18, BR-11, UC-6 | arc42 BB-9 + ADR-9 native blur (SM-4, QS-5, G-5/QG-5, R-14)
 | EARS-10 | PRD risk R-6 (IP/metadata disclosure — disclosed, mitigation TURN deferred)
 | EARS-11, R-10 acceptance | PRD risk R-10 (supply chain) — CSP shipped; SRI/Trusted Types are later hardening
 | Deferred to arc42 threat model (8.1) | R-3 single-use token revocation (expiry now bounds replay, M-9), R-8 full pre-share UI, SDP content/ICE-candidate constraints

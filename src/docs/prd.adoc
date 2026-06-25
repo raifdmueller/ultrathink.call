@@ -149,7 +149,7 @@ sit the slices, each a working increment through all layers.
 | R0 | Walking skeleton: 2 people, copy-paste signaling, screen sharing | D-3, D-1 (partial) | *done* (PR #1)
 | R1 | Camera/microphone selection; join via capability-URL + `mailto:` invite, 2 people | D-8, D-2 | *done*
 | R2 | 4-way mesh; host-relayed signaling (no broker, ADR-8); sovereign STUN; adapter seams | D-1, D-9, D-6 | *done* (EPIC 2)
-| R3 | Background blur/replacement, client-side | D-4 | planned
+| R3 | Background blur/replacement, client-side | D-4 | *done* (EPIC 3, #25 — native platform blur, ADR-9; vendored-model adapter #26 deferred)
 | R4 | Adaptive bitrate/resolution under CPU/bandwidth pressure | D-7 | *done* (EPIC 4, #27)
 | R5 | Training mode ~20 (asymmetric topology) | D-5 | vision, ADR-bound
 |===

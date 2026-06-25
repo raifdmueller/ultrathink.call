@@ -95,7 +95,7 @@ and `RTCPeerConnection` stats.
 Decided by ADR-1/ADR-2: with no backend, recovery is local and bounded.
 
 * *Bounded waits* — ICE gathering resolves on a timeout instead of hanging (EARS-4); a stalled gather still ships candidates.
-* *Fail-closed media* — a remote description without DTLS is rejected before `setRemoteDescription` (M-1); future blur fails closed (no raw frame) on model-load failure.
+* *Fail-closed media* — a remote description without DTLS is rejected before `setRemoteDescription` (M-1); background blur (BB-9, ADR-9) is native, so there is no model to fail to load — the adapted fail-closed rule is that the blur toggle never reports active unless the platform confirmed it, and reverts with a warning on failure, so an unblurred frame is never presented as blurred. A future vendored-model adapter (#26) would reinstate the stricter "no raw frame on model-load failure" rule.
 * *Graceful fallback* — device-switch failure keeps the previous track; an invalid token yields a message and no state change (BR-7).
 * *Reported failure* — `connectionState = failed` is surfaced with a NAT/TURN hint rather than swallowed (R-12).
 * *Not yet* — automatic reconnect and peer teardown are tracked debt (Chapter 11); R0 already flagged "no reconnect".
@@ -104,6 +104,7 @@ Decided by ADR-1/ADR-2: with no backend, recovery is local and bounded.
 
 Decided in ADR-5. Every external dependency sits behind a port so it is
 swappable (QG-4): the *Signaling Transport* (BB-4, manual adapter now, broker
-adapter at R2), the ICE/STUN configuration, and — at R3 — the video-processing
-pipeline for background blur. Adapters form an anti-corruption layer between the
+adapter at R2), the ICE/STUN configuration, and the *Video Processing* port
+(BB-9, native-blur adapter now, vendored-model adapter possible at #26).
+Adapters form an anti-corruption layer between the
 app's domain (host, guest, room, invite, answer) and the external protocols.
