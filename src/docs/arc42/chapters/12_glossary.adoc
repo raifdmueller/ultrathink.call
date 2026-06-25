@@ -22,3 +22,38 @@ Domain and technical terms use the same words in code, spec, and architecture
 | Sovereignty | Independence from US-jurisdiction components in the runtime path (G-1).
 | Capability secret | The whole token (R1) or the room UUID (R2 broker) whose possession admits a peer.
 |===
+
+=== ID conventions
+
+The artifacts cross-reference by stable ID prefixes. Each family is *defined* in
+its home table; this legend says what each prefix means and where to look (#58).
+
+[cols="1,2,2",options="header"]
+|===
+| Prefix | Meaning | Defined in
+| P-n | Persona | PRD
+| G-n | Goal | PRD
+| D-n | Deliverable | PRD
+| SM-n | Success Metric | PRD
+| BR-n | Business Rule | Spec
+| UC-n | Use Case (Cockburn) | Spec
+| SYS-UC-n | System Use Case (per interface) | Spec
+| EARS-n | EARS requirement | Spec
+| VR-n | Validation Rule | Spec
+| GD-n | Processing Guard | Spec
+| IC-n | Interface Contract | Spec
+| QG-n | Quality Goal (top 3–5) | arc42 §1.2
+| TC-n | Technical Constraint | arc42 §2
+| OC-n | Organizational Constraint | arc42 §2
+| S-n | Solution-strategy approach | arc42 §4
+| BB-n | Building Block | arc42 §5
+| T-n | Threat (STRIDE) | arc42 §8.1
+| M-n | Mitigation | arc42 §8.2
+| ADR-n | Architecture Decision | arc42 §9
+| QS-n | Quality Scenario | arc42 §10
+| R-n | Risk | arc42 §11
+| TD-n | Technical Debt | arc42 §11
+|===
+
+The `R-` risk register is authoritative in arc42 §11; the PRD lists the same
+risks with consistent numbering.
