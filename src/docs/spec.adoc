@@ -1,0 +1,494 @@
+= System Specification — ultrathink.call
+:author: Ralf D. Müller
+:revdate: 2026-06-25
+:revnumber: 0.2 (Draft)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+[abstract]
+This specification turns the PRD into testable behaviour: who does what (persona
+use cases), what each interface accepts and returns (system use cases), how the
+flows run including their error paths (activity diagrams and state machines),
+and the rules that decide accept-or-reject (business and validation rules). It
+covers the implemented slices R0–R1 and fixes the contracts that R2 extends;
+items beyond R1 are marked. Identifiers trace back to the PRD goals (G-*),
+deliverables (D-*), success criteria (SM-*), and risks (R-*), and forward to the
+arc42 architecture.
+
+== A server-less app has three interfaces and two actors
+
+The system is a static, server-less web app for a peer-to-peer WebRTC call. It
+has no backend, no API, and no login. Its "interfaces" are therefore the
+*capability-URL / signaling-token format*, the *`mailto:` invite*, and the
+*browser media-device selection* — specified as system use cases below.
+
+[cols="1,1,3",options="header"]
+|===
+| Actor | PRD persona | Role in the system
+| Host | P-1 / P-3 | Opens a call, creates an invite, distributes it, admits the answer.
+| Guest | P-2 / P-3 | Opens an invite, joins, returns an answer.
+| System | — | The browser app: media capture, WebRTC, token codec, validation.
+|===
+
+NOTE: At R1 a call has exactly two participants (one Host, one Guest). The mesh
+for up to four (D-1/R2) and the training topology (D-5/R5) extend, but do not
+contradict, these use cases.
+
+== Eight rules govern access, encryption, and sovereignty
+
+[cols="1,4",options="header"]
+|===
+| ID | Business rule
+| BR-1 | A call is reachable only by possessing its capability token; there is no account or directory (G-3).
+| BR-2 | The room id the System generates is a CSPRNG UUIDv4 (SM-6); the user never sets it.
+| BR-3 | Media and data channels are DTLS-SRTP encrypted with no plaintext fallback (G-8); a remote description that does not negotiate a DTLS fingerprint is refused (VR-9).
+| BR-4 | No participant data is sent to or stored on any server (G-9); the token travels only over channels the Host chooses (e.g. `mailto:`).
+| BR-5 | Every runtime endpoint is operated outside US jurisdiction (G-1). At R1 the only configured signaling endpoint is a non-US STUN server; the full endpoint audit (host, CDN, DNS) is SM-2/R2.
+| BR-6 | A session holds exactly one peer connection at R1; a second is refused with a message, not silently created.
+| BR-7 | An incoming token is acted on only after it passes every validation rule; an invalid token yields a message and no state change.
+| BR-8 | Untrusted token text is treated as data only — never evaluated, never inserted as HTML — and enters the System solely through SYS-UC-2.
+|===
+
+== Four use cases cover hosting, joining, devices, and sharing
+
+=== UC-1 Host a call
+
+* *Primary actor*: Host
+* *Goal*: Start a call others can join without an account.
+* *Trigger*: The Host chooses to meet and opens the app.
+* *Preconditions*: A browser with camera/mic in a secure (HTTPS) context.
+* *Postconditions (success)*: An invite capability-URL exists and has been handed to the Guest; the Host's peer connection waits for an answer.
+
+.Main success scenario
+. Host starts camera and microphone (→ UC-3).
+. Host requests an invite.
+. System generates a room id (BR-2), creates a WebRTC offer, gathers ICE candidates, and encodes offer + room id into a capability-URL (→ SYS-UC-1).
+. System shows the invite URL and offers a `mailto:` draft (→ SYS-UC-5) and a copy action.
+. Host sends the invite to the Guest over their own mail client (BR-4).
+. Host receives the Guest's answer token and loads it (→ SYS-UC-2).
+. System applies the answer; the connection establishes (BR-3); remote media appears.
+
+.Extensions
+* 1a. Camera/mic denied → System reports the failure; no invite is possible.
+* 3a. ICE gathering stalls → System ships the candidates gathered within the timeout and still produces a usable invite.
+* 2a/6a. Host requests a second invite while one is open → refused with a message (BR-6).
+* 6b. Host pastes their own invite → refused: one cannot answer one's own offer (BR-6, GD-1).
+* 6c. Answer token invalid → System reports the error; the connection keeps waiting (BR-7).
+* 7a. Connection fails (NAT/firewall, no TURN) → System reports the failed state.
+
+=== UC-2 Join a call
+
+* *Primary actor*: Guest
+* *Goal*: Join the Host's call from an invite, without an account.
+* *Trigger*: The Guest receives and opens an invite link.
+* *Preconditions*: A browser with camera/mic in a secure context; a valid invite token.
+* *Postconditions (success)*: The Guest is connected; an answer token has been returned to the Host.
+
+.Main success scenario
+. Guest opens the invite URL; System detects and validates the embedded offer (→ SYS-UC-2) and shows the room id.
+. Guest starts camera and microphone (→ UC-3).
+. Guest joins; System applies the offer, creates an answer, gathers ICE, and encodes the answer into a capability-URL (→ SYS-UC-3).
+. System shows the answer URL and offers a `mailto:` draft (→ SYS-UC-5) and a copy action.
+. Guest returns the answer to the Host (BR-4).
+. Connection establishes (BR-3); remote media appears.
+
+.Extensions
+* 1a. Invite token invalid/oversized/corrupt → System reports the error; no join is offered (BR-7, VR-*).
+* 1b. Guest receives the invite as text, not a clickable link → Guest pastes it into the incoming field; System validates it the same way.
+* 2a. Camera/mic denied → System reports the failure; no answer is possible.
+* 3a. Guest joins twice → refused (BR-6, GD-1).
+
+=== UC-3 Select camera and microphone
+
+* *Primary actor*: Host or Guest
+* *Goal*: Choose which camera and microphone the call uses, and change them live.
+* *Trigger*: Media has started, or the actor wants to switch device.
+* *Preconditions*: Media permission granted (device labels are only available afterwards).
+* *Postconditions*: The chosen devices feed the local preview and, if connected, the peer — without renegotiation.
+
+.Main success scenario
+. System enumerates video and audio input devices and preselects the active ones.
+. Actor picks a different camera or microphone.
+. System acquires the new device and replaces the outgoing track in place (`replaceTrack`).
+
+.Extensions
+* 3a. Device acquisition fails (in use/removed) → System reports it and keeps the previous track.
+* 2a. A screen share is active → device row is hidden; selection resumes after the share ends.
+
+=== UC-4 Share the screen
+
+* *Primary actor*: Host or Guest
+* *Goal*: Show the screen/window to the other participant.
+* *Trigger*: The actor starts sharing.
+* *Preconditions*: A running local media session.
+* *Postconditions*: The outgoing video is the shared surface until sharing stops, then the camera returns.
+
+.Main success scenario
+. Actor starts sharing; System warns about oversharing (R-8) and requests display capture, preferring a single window.
+. System replaces the outgoing video track with the screen track; the other participant sees the screen.
+. Actor stops sharing (in-app or via the browser UI); System restores the current camera track.
+
+.Extensions
+* 1a. Actor cancels the picker → no change; System reports the cancellation.
+
+== Each interface has a system use case
+
+=== SYS-UC-1 Produce an invite token
+
+* *Input*: local media stream; a freshly generated room id (BR-2).
+* *Processing*: create offer → set local description → gather ICE (bounded by a timeout) → build payload `{v:1, room, kind:"offer", sdp}` → gzip (if it shrinks the payload) → base64url → tag `g`/`r` → prefix as `#invite=`.
+* *Output*: a capability-URL `https://…/#invite=<token>` (IC-1/IC-2).
+* *Errors*: media missing → abort with message; offer/ICE failure → reset and report.
+
+=== SYS-UC-2 Consume an incoming capability token
+
+* *Input*: free text — a full URL (`#invite=`/`#answer=`) or a bare token. This is the System's untrusted-input trust boundary (BR-8).
+* *Validation* (decode-time, all must hold, else reject — BR-7): VR-1, VR-2, VR-8, VR-3, VR-4, VR-5, VR-6, VR-9 (see Validation Rules). The connection guard GD-1 is applied after decode.
+* *Processing*: on `offer` (and GD-1 satisfied) → store as pending, show room id, offer "join"; on `answer` → apply to the waiting connection.
+* *Output / status*: a status message; for `offer`, the join action becomes available; for `answer`, the connection proceeds to `connecting`.
+* *Error responses*: any failed rule → a human-readable status message; no state change.
+
+=== SYS-UC-3 Produce an answer token
+
+* *Input*: a validated pending offer; local media.
+* *Processing*: apply remote offer → create answer → set local description → gather ICE (timeout-bounded) → encode `{v:1, room, kind:"answer", sdp}` → prefix as `#answer=`.
+* *Output*: a capability-URL `https://…/#answer=<token>`.
+* *Errors*: join attempted without a pending offer, or twice → refused (BR-6, GD-1).
+
+=== SYS-UC-4 Enumerate and select devices
+
+* *Input*: the actor's device choice; media permission granted.
+* *Processing*: `enumerateDevices` → populate camera/mic lists with the active device preselected; on change, `getUserMedia` with the chosen `deviceId` and `replaceTrack`.
+* *Output/status*: updated local preview and outgoing track; a status message.
+* *Errors*: acquisition failure → report, keep previous track.
+
+=== SYS-UC-5 Compose a `mailto:` invite
+
+* *Input*: a subject, an intro text, and a capability-URL (invite or answer).
+* *Processing*: URL-encode subject and body (intro + capability-URL), then navigate to `mailto:?subject=…&body=…` (IC-3). The System never sends the mail (BR-4).
+* *Output*: a pre-filled draft in the actor's own mail client.
+* *Errors*: no configured mail client → the OS/browser handles it; the copy action is the fallback.
+
+== The connect flow has more failure paths than the happy path
+
+=== End-to-end connect flow (with error paths)
+
+[plantuml,connect-flow,svg]
+----
+@startuml
+start
+:Host starts camera/mic;
+if (media granted?) then (no)
+  :report failure;
+  stop
+else (yes)
+endif
+:Host requests invite;
+if (connection already open? GD-1) then (yes)
+  :refuse with message (BR-6);
+  stop
+else (no)
+endif
+:generate room id (BR-2);
+:create offer, gather ICE (timeout);
+:encode #invite= token;
+:Host sends link via mailto;
+fork
+  :Guest opens invite;
+  if (token valid? VR-1..6,8,9) then (no)
+    :report error;
+    stop
+  else (yes)
+  endif
+  :Guest starts camera/mic;
+  :apply offer, create answer, gather ICE;
+  :encode #answer= token;
+  :Guest returns answer to Host;
+fork again
+  :Host waits for answer;
+endfork
+:Host loads answer (VR-1..6,8,9);
+if (answer valid?) then (no)
+  :report error; keep waiting;
+  stop
+else (yes)
+endif
+:apply answer;
+if (DTLS-SRTP connects? BR-3) then (no)
+  :report failed (NAT/firewall, no TURN);
+  stop
+else (yes)
+  :remote media appears;
+  stop
+endif
+@enduml
+----
+
+=== Device switch and screen share
+
+[plantuml,media-switch,svg]
+----
+@startuml
+start
+:media running;
+split
+  :pick another camera/mic;
+  :getUserMedia(deviceId);
+  if (acquired?) then (no)
+    :report, keep previous;
+  else (yes)
+    :replaceTrack (no renegotiation);
+  endif
+split again
+  :start screen share;
+  :warn oversharing (R-8);
+  :getDisplayMedia(prefer window);
+  if (picker confirmed?) then (no)
+    :report cancellation;
+  else (yes)
+    :replaceTrack(screen); hide device row;
+    :on stop -> restore current camera track;
+  endif
+endsplit
+stop
+@enduml
+----
+
+== Acceptance criteria make each rule testable
+
+[source,gherkin]
+----
+# UC-1 / SYS-UC-1 — covers success criteria SM-5, SM-6
+Scenario: Host creates an invite
+  Given the host has started camera and microphone
+  When the host requests an invite
+  Then a capability-URL containing "#invite=" is shown
+  And the room id matches the UUIDv4 pattern
+  And a mailto draft and a copy action are offered
+
+# UC-1 extension — covers BR-6
+Scenario: A second invite is refused with a message
+  Given the host has already created an invite
+  When the host requests another invite
+  Then no second connection is created
+  And the status reads that an invite is already open
+
+# UC-2 / SYS-UC-2 — covers SM-5, BR-7
+Scenario: Guest joins from an invite link
+  Given the guest opened a valid invite link
+  And the guest has started camera and microphone
+  When the guest joins
+  Then an "#answer=" capability-URL is shown to return to the host
+
+# SYS-UC-2 validation — covers BR-7, VR-1..6,8,9
+Scenario Outline: An invalid token is rejected with no state change
+  Given the guest received a token that "<defect>"
+  When the app tries to load it
+  Then an error message is shown
+  And no join is offered
+  Examples:
+    | defect                                              |
+    | exceeds the size cap (VR-1)                         |
+    | is not valid base64url/gzip (VR-2)                  |
+    | decompresses beyond the output cap (VR-8)           |
+    | has v != 1 (VR-3)                                   |
+    | has kind not in {offer,answer} (VR-4)               |
+    | has a room that is not a UUIDv4 (VR-5)              |
+    | has sdp.type != kind (VR-6)                         |
+    | has an SDP without an a=fingerprint line (VR-9)     |
+
+# UC-1 extension — covers GD-1, BR-6
+Scenario: Host cannot answer their own invite
+  Given the host has an open invite
+  When the host loads that same invite link
+  Then it is refused with a clear message
+
+# UC-3 — device selection; observable signal for "no renegotiation"
+Scenario: Switch camera during a call
+  Given a connected call
+  When the participant selects a different camera
+  Then the outgoing video changes
+  And the connection state stays "connected" with no new offer/answer exchanged
+
+# BR-3 / VR-9 / SM-7 — encryption is enforced, not just assumed
+Scenario: A non-DTLS remote description is rejected
+  Given an incoming token whose SDP carries no a=fingerprint
+  When the app validates it
+  Then it is rejected before setRemoteDescription is called
+
+# R-8 — screen-share oversharing warning
+Scenario: Whole-screen share warns first
+  Given the participant starts a screen share
+  Then a warning about other windows/notifications is shown
+  And the picker requests a single window by preference
+
+# R-10 — supply-chain hardening (covers the static page integrity)
+Scenario: The page ships a restrictive CSP and no external scripts
+  When the page loads
+  Then a Content-Security-Policy meta restricts script/base/object/frame
+  And no third-party script or stylesheet is loaded
+
+# G-9 / SM-8 — no server-side data
+Scenario: No third-party network egress during a call
+  When two peers run a call
+  Then a network capture shows requests only to the page origin and the STUN allowlist
+
+# G-1 / SM-2 — sovereignty (R2 acceptance, not yet satisfied at R1)
+@r2
+Scenario: No US endpoint in the runtime path
+  When the call sets up
+  Then every endpoint — STUN, static host, CDN, DNS — is on the non-US allowlist
+----
+
+== EARS requirements pin the system's obligations
+
+[cols="1,4",options="header"]
+|===
+| ID | Requirement (EARS)
+| EARS-1 | When the host requests an invite, the system shall generate a CSPRNG UUIDv4 room id and a `#invite=` capability-URL. (SM-6, UC-1)
+| EARS-2 | When a capability token is loaded, the system shall validate it against the decode-time rules before changing any state, and shall reject an invalid token with a message. (BR-7, SYS-UC-2)
+| EARS-3 | While a peer connection already exists, if the actor requests a new invite or join, the system shall refuse it with a message. (BR-6, GD-1)
+| EARS-4 | If ICE gathering does not complete within the timeout, the system shall emit the candidates gathered so far. (UC-1 3a)
+| EARS-5 | When applying a remote description, the system shall reject any SDP that does not carry a DTLS fingerprint, and shall not fall back to plaintext. (G-8, SM-7, VR-9)
+| EARS-6 | While a screen share is active, the system shall hide device selection and shall restore the current camera track when sharing stops. (UC-4)
+| EARS-7 | The system shall not transmit participant media, identifiers, or the capability token to any server it or a third party operates. (G-9, SM-8)
+| EARS-8 | The system shall use only STUN/ICE endpoints operated outside US jurisdiction; the full host/CDN/DNS audit is deferred to SM-2/R2. (G-1)
+| EARS-9 | When a device is switched, the system shall replace the outgoing track in place without renegotiation. (UC-3)
+| EARS-10 | When a peer connects, the system shall disclose the local public IP to the remote peer and the STUN server; IP-hiding via TURN is out of R1 scope. (R-6)
+| EARS-11 | The system shall serve no external scripts and shall ship a Content-Security-Policy restricting script, base, object, and frame sources. (R-10)
+| EARS-12 | The system shall not issue runtime network requests to any origin other than the page origin and the STUN allowlist. (G-9, SM-8)
+|===
+
+== Entities, states, and contracts complete the picture
+
+=== Entity model
+
+[plantuml,entities,svg]
+----
+@startuml
+hide methods
+class Room { id : UUIDv4 }
+class CapabilityToken { kind : offer|answer\nencoding : g|r (gzip|raw) }
+class SignalingPayload { v : 1\nkind : offer|answer\nroom : UUIDv4\nsdp : SessionDescription }
+class PeerConnection { state : RTCPeerConnectionState }
+class MediaTrack { kind : video|audio }
+class Participant { role : host|guest }
+
+Room "1" -- "1..*" CapabilityToken
+CapabilityToken "1" -- "1" SignalingPayload
+SignalingPayload "1" -- "1" PeerConnection
+Participant "1" -- "1" PeerConnection : owns >
+PeerConnection "1" -- "0..*" MediaTrack : sends/receives >
+@enduml
+----
+
+=== State machines
+
+[plantuml,host-state,svg]
+----
+@startuml
+title Host session
+[*] --> Idle
+Idle --> Offering : create invite
+Offering --> AwaitingAnswer : invite shown
+AwaitingAnswer --> Connecting : valid answer loaded
+AwaitingAnswer --> AwaitingAnswer : invalid answer (rejected)
+Connecting --> Connected : DTLS-SRTP ok
+Connecting --> Failed : NAT/firewall (no TURN)
+Connected --> [*]
+Failed --> [*]
+@enduml
+----
+
+[plantuml,guest-state,svg]
+----
+@startuml
+title Guest session
+[*] --> Invited : invite validated
+Invited --> Answering : join (media ready)
+Answering --> Connecting : answer shown/returned
+Connecting --> Connected : DTLS-SRTP ok
+Connecting --> Failed : NAT/firewall (no TURN)
+Connected --> [*]
+Failed --> [*]
+@enduml
+----
+
+=== Interface contracts
+
+*IC-1 — Capability-URL grammar*
+
+----
+capability-url = origin path "#" ( "invite" | "answer" ) "=" token
+token          = ( "g" | "r" ) base64url      ; g = gzip, r = raw
+base64url      = 1*( ALPHA | DIGIT | "-" | "_" )   ; no padding
+----
+
+*IC-2 — Signaling payload (JSON, before encoding)*
+
+[source,json]
+----
+{
+  "v": 1,
+  "kind": "offer",
+  "room": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "sdp": { "type": "offer", "sdp": "v=0\r\n…a=fingerprint:…\r\n" }
+}
+----
+
+* `v` — schema version, fixed `1`.
+* `kind` — `"offer"` or `"answer"`; must equal `sdp.type`.
+* `room` — UUIDv4 string.
+* `sdp` — a WebRTC `RTCSessionDescriptionInit`; must contain a DTLS fingerprint.
+
+*IC-3 — `mailto:` invite*
+
+----
+mailto:?subject=<url-encoded subject>&body=<url-encoded intro + capability-url>
+----
+
+The body carries the capability-URL; the System never sends the mail (BR-4).
+
+=== Validation rules and guards
+
+Decode-time rules (SYS-UC-2; reject if violated):
+
+[cols="1,3,1",options="header"]
+|===
+| ID | Rule | Traces to
+| VR-1 | Token length ≤ the configured maximum. | R-3, DoS
+| VR-2 | base64url decode and (if `g`-tagged) gzip decompression succeed. | BR-7
+| VR-8 | Decompressed output ≤ the configured maximum; decompression aborts past the cap. | R-3, DoS (gzip bomb)
+| VR-3 | `v === 1`. | IC-2
+| VR-4 | `kind ∈ {"offer","answer"}`. | IC-2
+| VR-5 | `room` matches the UUIDv4 pattern (version/variant nibbles). | BR-2, SM-6
+| VR-6 | `sdp.type === kind` and `sdp.sdp` is a string. | IC-2
+| VR-9 | `sdp.sdp` contains an `a=fingerprint` line (DTLS-SRTP negotiated). | G-8, SM-7, BR-3
+|===
+
+Processing guard (post-decode, enforced by the handler, not the codec):
+
+* *GD-1* — An `offer` is refused, and a new invite/join is refused, while a local peer connection already exists. Prevents answering one's own invite and a second connection. (BR-6, R-3)
+
+NOTE: At R1 the incoming `room` is informational, not an access check — the
+*whole token* is the bearer secret (see PRD access section). VR-5 guards shape,
+not authorization.
+
+== Every element traces to the PRD
+
+[cols="1,3",options="header"]
+|===
+| Spec element | Sources / targets
+| UC-1..UC-4 | PRD deliverables D-1 (2-peer slice only), D-2, D-3, D-8
+| SYS-UC-1..5 | Interface contracts IC-1..IC-3; validation VR-*, guard GD-1
+| Acceptance criteria | Success criteria SM-2 (R2), SM-5, SM-6, SM-7, SM-8
+| BR-1..BR-8 | PRD goals G-1, G-3, G-6, G-8, G-9
+| VR-1, VR-8 | PRD risk R-3 / DoS
+| VR-9, EARS-5 | PRD goal G-8 (encryption enforced, not assumed)
+| EARS-10 | PRD risk R-6 (IP/metadata disclosure — disclosed, mitigation TURN deferred)
+| EARS-11, R-10 acceptance | PRD risk R-10 (supply chain) — CSP shipped; SRI/Trusted Types are later hardening
+| Deferred to arc42 threat model (8.1) | R-3 replay/revocation (no single-use/expiry at R1), R-8 full pre-share UI, SDP content/ICE-candidate constraints
+| Open: mesh (UC for 3..4), training topology | PRD R-1, issue #3; broker signaling, issue #7
+|===

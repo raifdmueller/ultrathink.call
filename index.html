@@ -132,7 +132,9 @@
     // Interim choice for R1; the vetted sovereign set with fallbacks is D-9/R2 (tracked as issue).
     const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.nextcloud.com:443" }] };
     const MAX_TOKEN = 100000;        // reject oversized pasted/linked payloads (anti-DoS)
+    const MAX_DECOMPRESSED = 512000; // cap gunzip output so a small token can't gzip-bomb us
     const ICE_TIMEOUT_MS = 4000;     // ship whatever candidates we have if gathering stalls
+    const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     const $ = (id) => document.getElementById(id);
     const status = (msg) => { $("status").textContent = msg; };
@@ -157,10 +159,21 @@
       const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close();
       return new Uint8Array(await new Response(cs.readable).arrayBuffer());
     }
-    async function gunzip(bytes) {
+    async function gunzip(bytes, maxOut) {
       const ds = new DecompressionStream("gzip");
       const w = ds.writable.getWriter(); w.write(bytes); w.close();
-      return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
+      const reader = ds.readable.getReader();
+      const chunks = []; let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > maxOut) throw new Error("Dekomprimierte Daten zu groß.");
+        chunks.push(value);
+      }
+      const out = new Uint8Array(total); let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return new TextDecoder().decode(out);
     }
     function b64urlEnc(bytes) {
       let bin = ""; for (const b of bytes) bin += String.fromCharCode(b);
@@ -182,11 +195,13 @@
     async function decodePayload(token) {
       if (!token || token.length > MAX_TOKEN) throw new Error("Eingabe fehlt oder ist zu groß.");
       const tag = token[0], body = b64urlDec(token.slice(1));
-      const json = tag === "g" ? await gunzip(body) : new TextDecoder().decode(body);
+      const json = tag === "g" ? await gunzip(body, MAX_DECOMPRESSED) : new TextDecoder().decode(body);
       const p = JSON.parse(json);
       if (p?.v !== 1 || (p.kind !== "offer" && p.kind !== "answer")) throw new Error("Unbekanntes Format.");
-      if (typeof p.room !== "string" || !/^[0-9a-f-]{36}$/i.test(p.room)) throw new Error("Ungültige Raum-ID.");
+      if (typeof p.room !== "string" || !UUID_V4.test(p.room)) throw new Error("Ungültige Raum-ID.");
       if (!p.sdp || p.sdp.type !== p.kind || typeof p.sdp.sdp !== "string") throw new Error("Ungültiges SDP.");
+      // Refuse any remote description that does not negotiate DTLS-SRTP (PRD G-8): no downgrade.
+      if (!/a=fingerprint:/i.test(p.sdp.sdp)) throw new Error("SDP ohne DTLS-Fingerprint abgelehnt.");
       return p;
     }
     // Accept a full link (#invite=/#answer=) or the bare encoded token.
@@ -284,7 +299,7 @@
 
     // --- Host: create invite --------------------------------------------------------
     $("createInvite").addEventListener("click", async () => {
-      if (pc) return;                       // guard: one connection per session (mesh is R2)
+      if (pc) { status("Es ist bereits eine Einladung offen."); return; }  // one connection per session (mesh is R2)
       $("createInvite").disabled = true;
       try {
         roomId = crypto.randomUUID();       // CSPRNG UUIDv4 — PRD SM-6
