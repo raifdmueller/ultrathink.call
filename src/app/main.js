@@ -1,13 +1,19 @@
-// UI Shell (BB-1) + Media Manager (BB-2) glue. Drives a MeshSession: the host
-// bootstraps each guest with a capability-URL, then the mesh forms automatically
-// (ADR-8, no broker). One video tile per peer; device/screen changes apply to all.
+// UI Shell (BB-1) + Media Manager (BB-2) glue. A guided wizard (#46) drives a
+// MeshSession: the host bootstraps each guest with a capability-URL, then the mesh
+// forms automatically (ADR-8, no broker). Camera start and link creation are one
+// step; controls appear with the call, not greyed-out beforehand. The host's
+// pending connection lives only in this page's memory — so we make "keep the page
+// open" explicit (keep-open note + beforeunload) and the answer is a copy/paste
+// token, never an openable link (opening it would reload and destroy the call).
 import { MeshSession } from "./mesh.js";
-import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired, shareData, canNativeShare } from "./signaling.js";
+import { buildCapabilityUrl, parseIncoming, mailtoLink, isExpired, shareData, canNativeShare } from "./signaling.js";
 import { AdaptController, TIERS, SAMPLE_INTERVAL_MS } from "./adapt.js";
 import { NativeBlurProcessor, supportsBlur, UNSUPPORTED_MSG } from "./blur.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
+const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:", linkLabel: "ultrathink.call-Einladung" };
+const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:" };
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
@@ -22,8 +28,20 @@ let sharing = false;           // a screen share is active
 let blurOn = false;            // background blur requested by the user (#25)
 let roomId = null;
 
-const setRoom = () => { if (roomId) $("roomLine").textContent = "Raum: " + roomId; };
 const getMedia = (c) => navigator.mediaDevices.getUserMedia(c);
+const setRoom = () => { if (roomId) { $("roomLine").textContent = "Raum: " + roomId; show("roomLine", true); } };
+
+// The host must not navigate away while a connection is pending — it lives only in
+// memory (ADR-8). Warn on accidental unload; #leaveCall disarms before reloading.
+let unloadGuard = null;
+function armUnloadGuard() {
+  if (unloadGuard) return;
+  unloadGuard = (e) => { e.preventDefault(); e.returnValue = ""; };
+  window.addEventListener("beforeunload", unloadGuard);
+}
+function disarmUnloadGuard() {
+  if (unloadGuard) { window.removeEventListener("beforeunload", unloadGuard); unloadGuard = null; }
+}
 
 // --- remote tiles, one per peer --------------------------------------------------
 // Host-only kick/mute controls for one guest tile (#28). Kept separate from the
@@ -73,26 +91,17 @@ function ensureMesh(isHost) {
       onPeerStream: (id, s) => { setTile(id, s); onPeerConnected(id); },
       onPeerLeave: (id) => { removeTile(id); if (!mesh || mesh.peers.size === 0) endAdapt(); },
       onStatus: (m) => status(m),
-      onKicked: () => { clearRemoteTiles(); endAdapt(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
+      onKicked: () => { clearRemoteTiles(); endAdapt(); disarmUnloadGuard(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
     });
   }
   return mesh;
 }
 
-const eachPeer = (fn) => { if (mesh) for (const s of mesh.peers.values()) fn(s); };
-
 // --- Adaptive media under load (#27, R4): degrade, do not drop -------------------
-// CPU is shared across all our senders, so one controller drives the whole local
-// encoding. Each tick we ask the browser whether any sender is CPU/bandwidth
-// limited and let the controller decide; on a tier change we re-encode for every
-// peer. The browser does the actual scaling — we only set the lever.
 const adapt = new AdaptController();
 let adaptTimer = null;
 
 function startAdapt() { if (!adaptTimer) adaptTimer = setInterval(sampleAdapt, SAMPLE_INTERVAL_MS); }
-// Stop sampling AND reset the controller — the call is over, so the next one must
-// start from full quality with no leftover streak (else a late joiner inherits a
-// dead tier and the timer ticks on forever).
 function endAdapt() { clearInterval(adaptTimer); adaptTimer = null; adapt.reset(); }
 
 async function sampleAdapt() {
@@ -111,35 +120,32 @@ async function sampleAdapt() {
   }
 }
 
-// A peer that connects after we have already stepped down must start at the
-// current tier, not full quality.
+// On the first remote stream the connection stands: collapse the exchange UI.
 async function onPeerConnected(id) {
   startAdapt();
   if (adapt.index > 0) await mesh?.peers.get(id)?.applyVideoParams(adapt.tier).catch(() => {});
+  show("stepAnswer", false); // guest: the answer was accepted
 }
 
-// --- Step 1: media + device list -------------------------------------------------
-$("startCam").addEventListener("click", async () => {
+// --- Phase 0: start media (camera/mic) + reveal in-call controls ------------------
+async function startMedia() {
+  if (localStream) return true;
   try {
     localStream = await getMedia({ video: true, audio: true });
     $("localVideo").srcObject = localStream;
     camTrack = localStream.getVideoTracks()[0] || null;
-    $("startCam").disabled = true;
+    show("videos", true); show("callControls", true);
     // Screen sharing exists only in desktop browsers (not iOS/Android) — #34.
     $("shareScreen").disabled = !navigator.mediaDevices?.getDisplayMedia;
     if (!navigator.mediaDevices?.getDisplayMedia) $("shareScreen").title = "Auf diesem Browser/Gerät nicht verfügbar (z. B. mobil).";
     refreshBlurAvailability(); // #25: only offer blur where the platform can deliver it
-    $("createInvite").disabled = false;
-    if (pendingOffer) show("joinAnswer", true);
     await populateDevices();
-    show("deviceRow", true);
-    status(pendingOffer
-      ? "Kamera läuft. Du wurdest eingeladen — jetzt „Beitreten & Antwort erzeugen“."
-      : "Kamera läuft. Lade Teilnehmer über „Einladung erstellen“ ein (eine Einladung pro Person).");
+    return true;
   } catch (err) {
     status("Kamera/Mikro-Zugriff fehlgeschlagen: " + err.message);
+    return false;
   }
-});
+}
 
 async function populateDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
@@ -166,8 +172,6 @@ async function switchTrack(kind, deviceId) {
       : { audio: { deviceId: { exact: deviceId } } });
     const track = (kind === "video" ? stream.getVideoTracks() : stream.getAudioTracks())[0];
     for (const s of (mesh ? mesh.peers.values() : [])) {
-      // While sharing, keep the screen on the peers' senders; the new camera
-      // track is restored when the share ends.
       if (kind === "video") { if (!sharing) await s.replaceVideo(track); }
       else await s.replaceAudio(track);
     }
@@ -179,8 +183,6 @@ async function switchTrack(kind, deviceId) {
     $("localVideo").srcObject = localStream;
     status("Gerät gewechselt.");
     if (kind === "video") {
-      // The new camera track carries no blur; re-evaluate and re-apply, failing
-      // closed (blur off + warn) if this device cannot blur (#25).
       refreshBlurAvailability();
       if (blurOn) {
         try { await applyBlur(true); }
@@ -195,27 +197,20 @@ $("camSelect").addEventListener("change", () => switchTrack("video", $("camSelec
 $("micSelect").addEventListener("change", () => switchTrack("audio", $("micSelect").value));
 
 // --- Background blur (#25, BB-9): native, fail-closed -----------------------------
-// We only ever offer blur the platform can actually deliver, and we never report
-// "blur on" unless the platform confirmed it (fail-closed, arc42 8.5).
 const BLUR_OFF_LABEL = "Hintergrund verwischen";
 const BLUR_ON_LABEL = "Hintergrund anzeigen";
 
 function refreshBlurAvailability() {
-  // A screen share owns the outgoing video; blur applies to the camera, so the
-  // toggle is meaningless mid-share.
   const ok = !sharing && !!camTrack && supportsBlur(camTrack);
   $("blurToggle").disabled = !ok;
   $("blurToggle").title = ok ? "" : UNSUPPORTED_MSG;
 }
 
 async function applyBlur(on) {
-  // setEnabled confirms the effect engaged (read-back) or throws → we fail closed.
   blurOn = await new NativeBlurProcessor(camTrack).setEnabled(on);
   $("blurToggle").textContent = blurOn ? BLUR_ON_LABEL : BLUR_OFF_LABEL;
 }
 
-// Fail closed: forget the blur claim, reset the label, warn. One place so the
-// toggle, the device switch, and the share-restore paths cannot drift.
 function revertBlur(msg) {
   blurOn = false;
   $("blurToggle").textContent = BLUR_OFF_LABEL;
@@ -231,29 +226,21 @@ $("blurToggle").addEventListener("click", async () => {
   }
 });
 
-// --- Host: create an invite for the next guest -----------------------------------
-$("createInvite").addEventListener("click", async () => {
+// --- The handshake: create an invite, ingest an invite/answer ---------------------
+async function createInvite() {
   if (bootstrapPending) { status("Es ist bereits eine Einladung offen — füge erst deren Antwort ein."); return; }
-  if (mesh && !mesh.isHost) { status("Du bist als Gast beigetreten."); return; }
-  $("createInvite").disabled = true;
-  try {
-    if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
-    ensureMesh(true);
-    const offer = await mesh.createBootstrapOffer();
-    setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
-    $("copyInvite").disabled = false; $("mailInvite").disabled = false;
-    applyShareChannels("shareInvite", "mailInvite"); // share/mailto controlled by visibility, not disabled
-    bootstrapPending = true;
-    status("Einladung erstellt. Schick den Link und füge unten die Antwort ein.");
-  } catch (err) {
-    $("createInvite").disabled = false;
-    status("Einladung fehlgeschlagen: " + err.message);
-  }
-});
+  if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
+  ensureMesh(true);
+  const offer = await mesh.createBootstrapOffer();
+  setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
+  applyShareChannels("shareInvite", "mailInvite");
+  bootstrapPending = true;
+  $("answerIn").value = "";
+  show("stepInvite", true);
+  status("Einladung erstellt. Schick den Link, lass die Seite offen und füge die Antwort ein.");
+}
 
-// --- Load an incoming invite (guest) or answer (host) ----------------------------
-$("loadIncoming").addEventListener("click", async () => {
-  const text = $("incomingIn").value;
+async function ingestIncoming(text) {
   if (!text.trim()) return;
   try {
     const payload = await parseIncoming(text);
@@ -261,85 +248,91 @@ $("loadIncoming").addEventListener("click", async () => {
       if (mesh && mesh.isHost) { status("Du bist Host — du kannst nicht deiner eigenen Einladung beitreten."); return; }
       if (isExpired(payload)) { status(EXPIRED_MSG); return; }
       pendingOffer = payload.sdp; roomId = payload.room; setRoom();
-      show("joinAnswer", localStream != null);
-      status(localStream
-        ? "Einladung geladen. Jetzt „Beitreten & Antwort erzeugen“."
-        : "Einladung geladen. Starte zuerst Kamera + Mikro, dann beitreten.");
+      showGuestStart();
+      status("Einladung geladen. Klick „Beitreten“.");
     } else {
       if (!mesh || !mesh.isHost || !bootstrapPending) { status("Keine offene Einladung für diese Antwort."); return; }
       await mesh.acceptBootstrapAnswer(payload.sdp);
       bootstrapPending = false;
-      $("createInvite").disabled = false;
-      clearLink("inviteLink"); $("incomingIn").value = "";
-      $("copyInvite").disabled = true; $("mailInvite").disabled = true;
-      show("shareInvite", false);
-      status("Teilnehmer verbunden. Lade weitere ein oder bleib einfach im Call — das Mesh verbindet sich selbst.");
+      clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false);
+      show("stepInvite", false);
+      status("Teilnehmer verbunden. Über „Weitere einladen“ kannst du weitere Personen hinzufügen.");
     }
   } catch (err) {
     status("Konnte Eingabe nicht lesen: " + err.message);
   }
+}
+
+function showGuestStart() {
+  show("startHost", false); show("startGuest", true); show("stepStart", true);
+  $("guestRoom").textContent = roomId ? "Raum: " + roomId : "";
+}
+
+// Host: one step — camera + first invite.
+$("openCall").addEventListener("click", async () => {
+  $("openCall").disabled = true;
+  if (!(await startMedia())) { $("openCall").disabled = false; return; }
+  show("stepStart", false);
+  show("inviteMore", true);
+  armUnloadGuard();
+  try { await createInvite(); }
+  catch (err) { status("Einladung fehlgeschlagen: " + err.message); }
 });
 
-// --- Guest: join and produce an answer -------------------------------------------
-$("joinAnswer").addEventListener("click", async () => {
+// Guest: one step — camera + answer.
+$("join").addEventListener("click", async () => {
   if (mesh || !pendingOffer) return;
-  $("joinAnswer").disabled = true;
+  $("join").disabled = true;
+  if (!(await startMedia())) { $("join").disabled = false; return; }
   try {
     ensureMesh(false);
     const answer = await mesh.joinWithOffer(pendingOffer);
-    setLink("answerLink", await buildCapabilityUrl("answer", roomId, answer), ANSWER_MSG.linkLabel);
-    show("answerLabel", true);
-    show("copyAnswer", true); applyShareChannels("shareAnswer", "mailAnswer");
-    show("joinAnswer", false);
-    status("Antwort erzeugt. Schick sie dem Host zurück — danach verbindet sich das Mesh automatisch.");
+    $("answerCode").value = await buildCapabilityUrl("answer", roomId, answer);
+    applyShareChannels("shareAnswer", "mailAnswer");
+    show("stepStart", false); show("stepAnswer", true);
+    armUnloadGuard();
+    status("Antwort erzeugt. Schick sie dem Host zurück.");
   } catch (err) {
-    mesh = null; $("joinAnswer").disabled = false;
+    mesh = null; $("join").disabled = false;
     status("Beitritt fehlgeschlagen: " + err.message);
   }
 });
 
-// --- Distribution: native share / clipboard / mailto -----------------------------
-// Copy works everywhere; native share where the platform has it, else mailto as
-// the desktop fallback (#42). One path is offered, never a dead button. The
-// subject/intro live in one place so the share and mailto wordings cannot drift.
-const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:", linkLabel: "ultrathink.call-Einladung" };
-const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:", linkLabel: "ultrathink.call-Antwort" };
+$("pasteLoad").addEventListener("click", () => ingestIncoming($("pasteIn").value));
+$("answerLoad").addEventListener("click", () => ingestIncoming($("answerIn").value));
+$("inviteMore").addEventListener("click", async () => {
+  try { await createInvite(); } catch (err) { status("Einladung fehlgeschlagen: " + err.message); }
+});
+$("leaveCall").addEventListener("click", () => { disarmUnloadGuard(); mesh?.close(); mesh = null; location.reload(); });
 
+// --- Distribution: native share / clipboard / mailto (#42) -----------------------
 function applyShareChannels(shareId, mailId) {
   const native = canNativeShare();
   show(shareId, native);
   show(mailId, !native);
 }
 
-// The capability-URL is shown as a compact link (#44): short visible text, the
-// full URL in `href`. These three helpers keep that in one place — the buttons
-// below read the URL back via linkUrl().
+// The invite is shown as a compact link (#44): short text, full URL in href.
 function setLink(id, url, label) { const a = $(id); a.href = url; a.textContent = label + " ↗"; show(id, true); }
 function clearLink(id) { const a = $(id); a.removeAttribute("href"); a.textContent = ""; show(id, false); }
 const linkUrl = (id) => $(id).getAttribute("href") || "";
 
-const copy = (id) => navigator.clipboard.writeText(linkUrl(id)).then(() => status("In die Zwischenablage kopiert."));
-$("copyInvite").addEventListener("click", () => copy("inviteLink"));
-$("copyAnswer").addEventListener("click", () => copy("answerLink"));
+const copyText = (text) => navigator.clipboard.writeText(text).then(() => status("In die Zwischenablage kopiert."));
+$("copyInvite").addEventListener("click", () => copyText(linkUrl("inviteLink")));
+$("copyAnswer").addEventListener("click", () => copyText($("answerCode").value));
+$("guardCopy").addEventListener("click", () => copyText($("guardCode").value));
 
-// navigator.share rejects with AbortError when the user dismisses the sheet —
-// that is not an error, so swallow it (acceptance: cancel = no state change).
-// `err` is not guaranteed to be an Error, so reach into it defensively.
-async function shareLink({ subject, intro }, linkId) {
-  try {
-    await navigator.share(shareData(subject, intro, linkUrl(linkId)));
-  } catch (err) {
-    if (err?.name !== "AbortError") status("Teilen fehlgeschlagen: " + (err?.message ?? err));
-  }
+// navigator.share rejects with AbortError when the user dismisses the sheet — not
+// an error. `err` is not guaranteed to be an Error, so reach in defensively.
+async function sharePayload(data) {
+  try { await navigator.share(data); }
+  catch (err) { if (err?.name !== "AbortError") status("Teilen fehlgeschlagen: " + (err?.message ?? err)); }
 }
-$("shareInvite").addEventListener("click", () => shareLink(INVITE_MSG, "inviteLink"));
-$("shareAnswer").addEventListener("click", () => shareLink(ANSWER_MSG, "answerLink"));
-$("mailInvite").addEventListener("click", () => {
-  location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, linkUrl("inviteLink"));
-});
-$("mailAnswer").addEventListener("click", () => {
-  location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, linkUrl("answerLink"));
-});
+$("shareInvite").addEventListener("click", () => sharePayload(shareData(INVITE_MSG.subject, INVITE_MSG.intro, linkUrl("inviteLink"))));
+// The answer is shared as TEXT (no url field), so it is never a tap-to-open link (#46).
+$("shareAnswer").addEventListener("click", () => sharePayload({ title: ANSWER_MSG.subject, text: ANSWER_MSG.intro + "\n\n" + $("answerCode").value }));
+$("mailInvite").addEventListener("click", () => { location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, linkUrl("inviteLink")); });
+$("mailAnswer").addEventListener("click", () => { location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, $("answerCode").value); });
 
 // --- Screen sharing (applies to every peer) --------------------------------------
 $("shareScreen").addEventListener("click", async () => {
@@ -355,8 +348,7 @@ $("shareScreen").addEventListener("click", async () => {
     for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
     sharing = true;
     $("localVideo").srcObject = display;
-    show("deviceRow", false);
-    $("shareScreen").disabled = true; $("stopShare").disabled = false;
+    $("shareScreen").disabled = true; show("stopShare", true);
     refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
     screenTrack.addEventListener("ended", restoreCamera);
@@ -370,11 +362,9 @@ async function restoreCamera() {
   camTrack = localStream.getVideoTracks()[0] || camTrack;
   for (const s of (mesh ? mesh.peers.values() : [])) if (camTrack) await s.replaceVideo(camTrack);
   $("localVideo").srcObject = localStream;
-  show("deviceRow", true);
-  $("shareScreen").disabled = false; $("stopShare").disabled = true;
+  $("shareScreen").disabled = false; show("stopShare", false);
   status("Zurück auf Kamera.");
-  // The restored camera frame is unblurred until re-applied; re-assert the blur
-  // state fail-closed so we never show the camera blurred when it is not (#25).
+  // The restored camera frame is unblurred until re-applied; re-assert fail-closed (#25).
   refreshBlurAvailability();
   if (blurOn) {
     try { await applyBlur(true); }
@@ -382,14 +372,20 @@ async function restoreCamera() {
   }
 }
 
-// --- On load: auto-detect an invite in the URL -----------------------------------
-(function detectInvite() {
-  if (!inviteTokenInHash()) return;
-  $("incomingIn").value = location.hash;
+// --- On load: an invite (→ join) or an answer opened by mistake (→ guard) ---------
+(function detectOnLoad() {
+  if (!/#(invite|answer)=/.test(location.hash)) return;
   parseIncoming(location.hash).then((p) => {
-    if (isExpired(p)) { status(EXPIRED_MSG); return; }
-    pendingOffer = p.sdp; roomId = p.room; setRoom();
-    if (localStream) show("joinAnswer", true);
-    status("Du wurdest eingeladen. Starte Kamera + Mikro, dann „Beitreten & Antwort erzeugen“.");
-  }).catch((err) => status("Einladungs-Link konnte nicht gelesen werden: " + err.message));
+    if (p.kind === "offer") {
+      if (isExpired(p)) { status(EXPIRED_MSG); return; }
+      pendingOffer = p.sdp; roomId = p.room; setRoom();
+      showGuestStart();
+      status("Du wurdest eingeladen. Klick „Beitreten“.");
+    } else {
+      // An #answer= link was opened — it belongs in the host's open call tab (#46).
+      $("guardCode").value = location.href;
+      show("stepStart", false); show("answerGuard", true);
+      status("Das ist eine Antwort — kopiere sie und füge sie im Call-Tab ein.");
+    }
+  }).catch((err) => status("Link konnte nicht gelesen werden: " + err.message));
 })();

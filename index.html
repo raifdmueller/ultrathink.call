@@ -16,11 +16,11 @@
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, sans-serif;
-      margin: 0; padding: 1rem;
+      margin: 0; padding: 1rem; max-width: 920px; margin-inline: auto;
       background: #14161a; color: #e6e8eb;
     }
     h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
-    h2 { font-size: 1rem; margin: 1.2rem 0 .5rem; }
+    h2 { font-size: 1rem; margin: 0 0 .6rem; }
     p.lead { margin: 0 0 1rem; color: #9aa3ad; font-size: .9rem; }
     .videos {
       display: grid; gap: .75rem; margin-bottom: 1rem;
@@ -32,104 +32,127 @@
       background: rgba(0,0,0,.6); font-size: .75rem; }
     .modctl { position: absolute; top: 6px; right: 6px; display: flex; gap: .25rem; }
     .modctl button { padding: 2px 6px; font-size: .68rem; background: rgba(20,22,26,.85); }
-    .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; align-items: center; }
+    section.card { border: 1px solid #2b313a; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; background: #181b20; }
+    .controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
     button {
       background: #2d6cdf; color: #fff; border: 0; border-radius: 6px;
       padding: .55rem .9rem; font-size: .9rem; cursor: pointer;
     }
+    button.big { padding: .8rem 1.4rem; font-size: 1rem; }
     button.secondary { background: #2b313a; }
     button:disabled { opacity: .4; cursor: not-allowed; }
-    .devices { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    .devices { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
     .devices label { display: flex; flex-direction: column; font-size: .72rem; color: #9aa3ad; gap: .2rem; }
-    select, input[type=text] {
+    select {
       background: #0d0f12; color: #cfd4da; border: 1px solid #2b313a; border-radius: 6px;
       padding: .4rem; font-size: .85rem; max-width: 320px;
     }
-    .exchange { display: grid; gap: .75rem; grid-template-columns: 1fr 1fr; }
-    @media (max-width: 760px) { .exchange { grid-template-columns: 1fr; } }
-    fieldset { border: 1px solid #2b313a; border-radius: 8px; padding: .75rem; }
-    legend { padding: 0 .4rem; color: #9aa3ad; font-size: .8rem; }
     textarea { width: 100%; background: #0d0f12; color: #cfd4da;
       border: 1px solid #2b313a; border-radius: 6px; padding: .5rem;
-      font-family: ui-monospace, monospace; font-size: .72rem; }
-    textarea { min-height: 70px; resize: vertical; }
-    .invitelink { display: inline-block; margin: .4rem 0 .1rem; color: #7fb0ff; font-size: .9rem;
+      font-family: ui-monospace, monospace; font-size: .72rem; min-height: 64px; resize: vertical; }
+    .invitelink { display: inline-block; margin: .2rem 0 .4rem; color: #7fb0ff; font-size: .95rem;
       text-decoration: none; font-weight: 600; }
     .invitelink:hover { text-decoration: underline; }
-    .row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
-    label.step { display: block; font-size: .8rem; margin: 0 0 .3rem; color: #cfd4da; }
-    .hint { font-size: .78rem; color: #9aa3ad; margin: .35rem 0 0; }
-    #status { font-size: .82rem; color: #7fd18b; min-height: 1.1em; margin-bottom: .5rem; }
-    .room { font-size: .78rem; color: #9aa3ad; }
+    .row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0; }
+    .hint { font-size: .82rem; color: #9aa3ad; margin: .4rem 0 0; }
+    .keepopen { font-size: .9rem; color: #ffd479; background: #2a2410; border: 1px solid #4a3f16;
+      border-radius: 8px; padding: .6rem .8rem; margin: .6rem 0; }
+    details summary { cursor: pointer; color: #9aa3ad; font-size: .82rem; margin-top: .6rem; }
+    #status { font-size: .85rem; color: #7fd18b; min-height: 1.1em; margin-bottom: .6rem; }
+    .room { font-size: .82rem; color: #9aa3ad; margin: 0 0 .6rem; }
     .hidden { display: none; }
   </style>
 </head>
 <body>
   <h1>ultrathink.call</h1>
   <p class="lead">
-    Souveräner P2P-Videocall (Mesh, bis zu 4 Personen), ohne eigenen Server. Der Host lädt
-    jede Person per Link (E-Mail) ein; danach verbinden sich alle automatisch direkt. Kamera-/
-    Mikrofonwahl und Screensharing inklusive. Souveräner STUN (Nextcloud, DE), kein TURN.
-    Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze R-6) — teile ihn nur mit den
-    eingeladenen Personen.
+    Souveräner P2P-Videocall ohne eigenen Server. Souveräner STUN (DE), kein TURN.
+    Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze R-6) — teile ihn nur mit eingeladenen Personen.
   </p>
 
-  <div class="videos" id="videos">
-    <div class="tile"><video id="localVideo" autoplay playsinline muted></video><span>Du (lokal)</span></div>
+  <div class="videos hidden" id="videos">
+    <div class="tile"><video id="localVideo" autoplay playsinline muted></video><span>Du</span></div>
     <!-- one tile per remote peer is injected here -->
   </div>
 
-  <div class="controls">
-    <button id="startCam">1 · Kamera + Mikro starten</button>
-    <button id="shareScreen" class="secondary" disabled>Bildschirm teilen</button>
-    <button id="stopShare" class="secondary" disabled>Teilen beenden</button>
-    <button id="blurToggle" class="secondary" disabled>Hintergrund verwischen</button>
-  </div>
+  <div id="status">Bereit.</div>
+  <p class="room hidden" id="roomLine"></p>
 
-  <div class="devices hidden" id="deviceRow">
-    <label>Kamera
-      <select id="camSelect"></select>
-    </label>
-    <label>Mikrofon
-      <select id="micSelect"></select>
-    </label>
-  </div>
+  <!-- PHASE: start -------------------------------------------------------------->
+  <section class="card" id="stepStart">
+    <div id="startHost">
+      <h2>Call starten</h2>
+      <p class="hint">Kamera und Mikro werden gestartet und ein Einladungs-Link erzeugt — in einem Schritt.</p>
+      <button id="openCall" class="big">Call eröffnen</button>
+      <details>
+        <summary>Per Text eingeladen? Einladung einfügen</summary>
+        <textarea id="pasteIn" placeholder="Einladungs-Link oder -Daten hier einfügen, dann „Laden“."></textarea>
+        <div class="row"><button id="pasteLoad" class="secondary">Laden</button></div>
+      </details>
+    </div>
+    <div id="startGuest" class="hidden">
+      <h2>Du wurdest eingeladen</h2>
+      <p class="room" id="guestRoom"></p>
+      <p class="hint">Mit „Beitreten“ starten Kamera/Mikro und es wird eine Antwort erzeugt, die du dem Host zurückschickst.</p>
+      <button id="join" class="big">Beitreten</button>
+    </div>
+  </section>
 
-  <div id="status">Bereit. Schritt 1: Kamera + Mikro starten.</div>
-  <p class="room" id="roomLine"></p>
+  <!-- PHASE: host waiting for the answer ---------------------------------------->
+  <section class="card hidden" id="stepInvite">
+    <h2>1 · Einladung verschicken</h2>
+    <a id="inviteLink" class="invitelink hidden" target="_blank" rel="noopener noreferrer"></a>
+    <div class="row">
+      <button id="shareInvite" class="secondary hidden">Teilen</button>
+      <button id="copyInvite" class="secondary">Link kopieren</button>
+      <button id="mailInvite" class="secondary">Per E-Mail</button>
+    </div>
+    <p class="keepopen">Lass diese Seite offen, bis die Person verbunden ist — die Verbindung lebt nur hier.
+      Sobald die Antwort zurückkommt, füge sie unten ein.</p>
+    <h2>2 · Antwort einfügen</h2>
+    <textarea id="answerIn" placeholder="Antwort hier einfügen, dann „Antwort übernehmen“."></textarea>
+    <div class="row"><button id="answerLoad" class="secondary">Antwort übernehmen</button></div>
+  </section>
 
-  <h2>2 · Verbinden</h2>
-  <div class="exchange">
-    <fieldset>
-      <legend>Einladen (Host)</legend>
-      <label class="step">A · Einladung erstellen und verschicken</label>
-      <button id="createInvite" disabled>Einladung erstellen</button>
-      <a id="inviteLink" class="invitelink hidden" target="_blank" rel="noopener noreferrer"></a>
-      <div class="row">
-        <button id="shareInvite" class="secondary hidden">Teilen</button>
-        <button id="copyInvite" class="secondary" disabled>Link kopieren</button>
-        <button id="mailInvite" class="secondary" disabled>Per E-Mail einladen</button>
+  <!-- PHASE: guest sends the answer back ---------------------------------------->
+  <section class="card hidden" id="stepAnswer">
+    <h2>Antwort zurückschicken</h2>
+    <p class="hint">Diese Antwort ist <strong>nicht zum Anklicken</strong> — schick sie dem Host, der sie einfügt.</p>
+    <textarea id="answerCode" readonly></textarea>
+    <div class="row">
+      <button id="shareAnswer" class="secondary hidden">Antwort teilen</button>
+      <button id="copyAnswer" class="secondary">Antwort kopieren</button>
+      <button id="mailAnswer" class="secondary">Per E-Mail</button>
+    </div>
+    <p class="keepopen">Lass auch du diese Seite offen, bis ihr verbunden seid.</p>
+  </section>
+
+  <!-- Safety net: someone opened an #answer= link --------------------------------->
+  <section class="card hidden" id="answerGuard">
+    <h2>Das ist eine Antwort, kein Link zum Öffnen</h2>
+    <p class="hint">Du hast eine Antwort geöffnet. Sie gehört in den ursprünglichen Call-Tab des Hosts —
+      kopiere sie und füge sie dort ein.</p>
+    <textarea id="guardCode" readonly></textarea>
+    <div class="row"><button id="guardCopy" class="secondary">Antwort kopieren</button></div>
+  </section>
+
+  <!-- In-call controls: shown once media is live -------------------------------->
+  <section class="card hidden" id="callControls">
+    <div class="controls">
+      <button id="shareScreen" class="secondary">Bildschirm teilen</button>
+      <button id="stopShare" class="secondary hidden">Teilen beenden</button>
+      <button id="blurToggle" class="secondary" disabled>Hintergrund verwischen</button>
+      <button id="inviteMore" class="secondary hidden">Weitere einladen</button>
+      <button id="leaveCall" class="secondary">Verlassen</button>
+    </div>
+    <details>
+      <summary>Kamera &amp; Mikrofon wählen</summary>
+      <div class="devices">
+        <label>Kamera<select id="camSelect"></select></label>
+        <label>Mikrofon<select id="micSelect"></select></label>
       </div>
-      <p class="hint">Der Eingeladene öffnet den Link, erzeugt eine Antwort und schickt sie dir zurück.</p>
-    </fieldset>
-
-    <fieldset>
-      <legend>Empfangen &amp; verbinden</legend>
-      <label class="step">B · Eingegangenen Link oder Daten einfügen (Einladung oder Antwort)</label>
-      <textarea id="incomingIn" placeholder="Link oder Daten hier einfügen, dann „Laden“."></textarea>
-      <div class="row">
-        <button id="loadIncoming" class="secondary">Laden / Übernehmen</button>
-        <button id="joinAnswer" class="secondary hidden">Beitreten &amp; Antwort erzeugen</button>
-      </div>
-      <label class="step hidden" id="answerLabel" style="margin-top:.6rem;">C · Antwort zurückschicken</label>
-      <a id="answerLink" class="invitelink hidden" target="_blank" rel="noopener noreferrer"></a>
-      <div class="row">
-        <button id="shareAnswer" class="secondary hidden">Antwort teilen</button>
-        <button id="copyAnswer" class="secondary hidden">Antwort kopieren</button>
-        <button id="mailAnswer" class="secondary hidden">Antwort per E-Mail</button>
-      </div>
-    </fieldset>
-  </div>
+    </details>
+  </section>
 
   <script type="module" src="src/app/main.js"></script>
 </body>
