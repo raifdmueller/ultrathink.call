@@ -88,6 +88,33 @@ For each issue:
 - Check if spec or architecture docs need updating
 - When EPIC is complete, create a Pull Request
 
+### Branch & CI hygiene (learned the hard way)
+
+Squash-merge plus a reused branch silently kills CI. When a PR is squash-merged,
+main gets one new commit that does **not** share history with the branch's
+commits. Keep developing on that same branch and the next PR opens **already in
+merge conflict** with main (the branch still carries the now-squashed originals).
+GitHub does not schedule `pull_request` checks for a PR it cannot test-merge, so
+CI never runs — while `push`-triggered workflows on main keep going green, hiding
+the gap. We shipped four PRs this way with zero test runs.
+
+Rules that prevent it:
+
+- **Start each EPIC from a fresh sync of main.** After a merge, reconcile the
+  working branch to `origin/main` (a fresh branch, or rebase the branch onto the
+  updated `origin/main`) **before** the next slice. Never open a PR from a branch
+  that still holds already-merged commits.
+- **Update the remote-tracking ref, not just FETCH_HEAD.** `git fetch origin main`
+  alone can leave `origin/main` stale, so conflict/merge checks read the wrong
+  base. Fetch so `refs/remotes/origin/main` actually moves (e.g.
+  `git fetch origin main:refs/remotes/origin/main`, or `git fetch origin`), then
+  rebase onto it.
+- **Green CI is the merge gate, not local tests.** Wait for the `pull_request`
+  run to appear and pass before merging. If no run appears within a few minutes,
+  treat it as a red flag (usually a merge-conflict/base problem) and fix the
+  branch — do not merge on local-green alone. A PR stuck at "pending / 0 checks"
+  means no run was scheduled, not that CI is slow.
+
 ## Refactoring
 
 Refactoring targets are named code smells, not a vague urge to "clean up".
