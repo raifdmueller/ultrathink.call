@@ -243,7 +243,7 @@ NOTE: This is *self*-mute (sender-side, `track.enabled`), distinct from host mod
 === SYS-UC-5 Hand off an invite (native share or `mailto:`)
 
 * *Input*: a subject, an intro text, and a capability-URL (invite or answer).
-* *Processing*: pick the distribution channel by capability (#42). Where the Web Share API is present, navigate the OS share sheet via `navigator.share({title, text, url})` — routing to whatever channel the device has (messenger, RCS, mail, AirDrop). Where it is absent, fall back to a `mailto:` draft (`mailto:?subject=…&body=…`, IC-3). The clipboard *copy* action is always available. The System never sends anything itself (BR-4).
+* *Processing*: pick the distribution channel by capability (#42). Where the Web Share API is present, navigate the OS share sheet via `navigator.share({title, text, url})` — routing to whatever channel the device has (messenger, RCS, mail, AirDrop). Where it is absent, fall back to a `mailto:` draft (`mailto:?subject=…&body=…`, IC-3). The clipboard *copy* action is always available; for the invite it writes a **rich link** (`text/html` `<a>` + `text/plain` URL fallback, #60), so pasting into an HTML mail editor yields a compact clickable link rather than the raw URL. The System never sends anything itself (BR-4).
 * *Output*: the OS share sheet, or a pre-filled mail draft, or the link on the clipboard.
 * *Errors*: native share dismissed by the user → no error, no state change. No mail client / no share API → the copy action is the universal fallback.
 
@@ -471,6 +471,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-25 | When a participant sends a chat line, the system shall broadcast it over each connected peer's data channel, and shall render every received line as text — never HTML — attributed to the channel it arrived on. (UC-8, SYS-UC-7, BR-8, #48)
 | EARS-26 | When a received chat line exceeds the cap or is malformed, the system shall drop it without rendering. (SYS-UC-7, #48)
 | EARS-27 | The host shall keep an authoritative set of muted peers, replay it to a joining guest, and re-assert it on each fresh track, so a peer muted before a link exists is still silenced; the host UI shall derive its mute label from that set. (UC-5, #37)
+| EARS-28 | When the user copies the invite, the system shall write a rich link (`text/html` anchor plus a `text/plain` URL fallback) where the Clipboard API supports it, and a plain-text URL otherwise. (SYS-UC-5, #60)
 |===
 
 == Entities, states, and contracts complete the picture
