@@ -1,0 +1,52 @@
+== Context and Scope
+
+The system is one ultrathink.call instance running in a participant's browser.
+Everything outside that browser tab is an external system: the other
+participant's instance, the sovereign STUN server, the out-of-band channel that
+carries the invite, and the static host that delivers the app.
+
+=== Business Context
+
+[cols="1,2,2",options="header"]
+|===
+| Neighbour | Input to the system | Output from the system
+| Host / Guest (user) | Camera/mic, device choice, paste of an invite/answer | Local + remote video, the invite/answer capability-URL
+| Other participant | The returned answer (or invite) token | The offer (or answer) token
+| Out-of-band channel (email/RCS) | — | The `mailto:` draft carrying the capability-URL
+| Sovereign STUN server | ICE candidates (public reflexive address) | STUN binding requests
+| Static host (GitHub Pages) | — | Delivers the static page over HTTPS
+|===
+
+=== Technical Context
+
+The same external set appears as the Level-1 boundary in Chapter 5 — one system
+boundary in both views.
+
+[plantuml,c3-context,svg]
+----
+@startuml
+!include <C4/C4_Context>
+
+Person(user, "Host / Guest", "A trainer or participant in a browser")
+System(call, "ultrathink.call", "Static web app: WebRTC P2P call, capability-URL signaling, screen sharing")
+
+System_Ext(peer, "Remote participant", "Another ultrathink.call instance in a browser")
+System_Ext(stun, "Sovereign STUN", "Nextcloud (DE) STUN — public reflexive address discovery")
+System_Ext(mail, "Out-of-band channel", "Host's own mail client (mailto:) / messenger")
+System_Ext(host, "Static host", "GitHub Pages — serves the page over HTTPS")
+
+Rel(user, call, "Uses (camera, mic, screen, paste)")
+Rel(call, host, "Loaded from", "HTTPS")
+Rel(call, stun, "Discovers public address", "STUN")
+Rel(call, mail, "Generates invite draft", "mailto:")
+Rel(call, peer, "Encrypted media + data", "DTLS-SRTP / P2P")
+Rel(call, peer, "Capability token (offer/answer)", "out-of-band, via user")
+@enduml
+----
+
+=== Scope boundary
+
+In scope: media capture, the WebRTC peer connection, the capability-URL token
+codec and validation, device selection, screen sharing, and the `mailto:` invite.
+Out of scope (external): the mail transport, the STUN operator, the static host,
+and the remote peer's runtime. There is deliberately no backend in scope (TC-1).

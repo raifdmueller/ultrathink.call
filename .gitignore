@@ -1,0 +1,5 @@
+# docToolchain build output
+build/
+.gradle/
+
+# local docToolchain install lives in $HOME/.doctoolchain (not in repo)

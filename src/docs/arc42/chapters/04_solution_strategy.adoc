@@ -1,0 +1,21 @@
+== Solution Strategy
+
+The strategy follows from one decision: stay infrastructure-free. That buys
+sovereignty and zero-ops but caps the mesh, which is why the 20-person training
+case is the central open tension (Chapter 11, R-1). Each top quality goal from
+Chapter 1.2 maps to a named approach here.
+
+[cols="1,2,3,1",options="header"]
+|===
+| ID | Approach | How it works | Serves
+| S-1 | Server-less P2P | A static page plus browser WebRTC; peers connect directly, no media server. No backend to run (decided in ADR-1). | QG-1, QG-2
+| S-2 | Sovereign-by-construction endpoints | The only runtime endpoint is a non-US STUN server (Nextcloud, DE); the page is served over HTTPS; no third-party scripts (ADR-3). | QG-1
+| S-3 | Capability-URL signaling | The SDP is carried in the URL fragment and distributed via the host's own `mailto:`; the token is the bearer secret. No login, no signaling backend (ADR-2). | QG-1, QG-2
+| S-4 | Graceful media degradation | Adaptive bitrate/resolution under CPU/bandwidth pressure so the stream degrades instead of dropping (R4 slice; the alfaview failure must not recur). | QG-3
+| S-5 | Ports and adapters | Signaling, ICE, and video processing sit behind ports; each external dependency is swappable, preventing new lock-in (ADR-5). | QG-1, QG-4
+| S-6 | Client-side privacy | Background blur runs in the browser before the frame is encoded, so surroundings never leave the device (R3 slice). | QG-5
+|===
+
+The walking-skeleton-then-slices method (OC-4) keeps every increment deployable;
+the topology choice for scale (mesh vs. broadcast vs. SFU) is deferred to an ADR
+rather than forced now (ADR-4).

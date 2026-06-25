@@ -1,0 +1,46 @@
+== Deployment View
+
+Deployment is deliberately trivial: a static page on GitHub Pages, two browsers,
+and one sovereign STUN server. There is no server-side runtime to deploy (TC-1),
+which is itself the headline operability property (QG-2).
+
+[plantuml,deployment,svg]
+----
+@startuml
+node "GitHub Pages\n(static host, HTTPS)" as pages {
+  artifact "index.html\n(the whole app)" as app
+  artifact ".github/workflows/pages.yml\n(deploy)" as wf
+}
+node "Host device" as h {
+  artifact "Browser tab\nultrathink.call" as hb
+}
+node "Guest device" as g {
+  artifact "Browser tab\nultrathink.call" as gb
+}
+cloud "Sovereign STUN\nstun.nextcloud.com:443 (DE)" as stun
+cloud "Out-of-band channel\n(mail / messenger)" as mail
+
+pages --> hb : HTTPS (load app)
+pages --> gb : HTTPS (load app)
+hb ..> stun : STUN
+gb ..> stun : STUN
+hb <--> gb : DTLS-SRTP media + data (P2P)
+hb ..> mail : mailto: invite
+mail ..> gb : capability-URL
+@enduml
+----
+
+=== Deployment mapping
+
+[cols="1,2,2",options="header"]
+|===
+| Node | Hosts | Notes
+| GitHub Pages | `index.html`, the deploy workflow, the rendered architecture site | Static, HTTPS (secure context required by WebRTC). Build via the Pages Action.
+| Host / Guest browser | One app instance each | Camera/mic permission; modern browser with `RTCPeerConnection`, `CompressionStream`.
+| Sovereign STUN | Public reflexive-address discovery | Non-US (DE); the only configured runtime endpoint. Swappable (S-5).
+| Out-of-band channel | Carries the capability-URL | The host's own mail client; never operated by us (BR-4).
+|===
+
+The architecture documentation itself is rendered by docToolchain `generateSite`
+in the same Pages workflow and published under `/architecture/`, so the app
+stays at the site root.
