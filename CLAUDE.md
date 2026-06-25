@@ -111,6 +111,27 @@ Quality assurance follows three layers:
 - Architecture review using ATAM (scenario-based tradeoff analysis against quality goals)
 - Use a different AI model or fresh session for reviews to avoid blind spots
 
+## Review Gate
+
+After every deliverable — PRD, Spec, arc42 architecture, and each implementation slice — run a review gate before the deliverable counts as done. Reviews run in a **context-less subagent**: a fresh session given only the artifact, the review rubric, and this contract — never the author's prior reasoning. This realizes the "different session to avoid blind spots" rule above.
+
+Run the reviews that fit the artifact; the rest activate as the relevant artifacts come into existence. ATAM needs an architecture with quality goals; code, security (OWASP), and maintainability reviews need code — so they do not apply to a pure requirements document.
+
+| After | Reviews | Drift check against |
+|---|---|---|
+| PRD | Requirements quality (completeness, MECE, testable success criteria, INVEST) + security/privacy goals captured | — |
+| Spec | Spec quality (Gherkin/EARS testability, use-case completeness) + security requirements | PRD |
+| arc42 | ATAM (scenario tradeoffs vs. quality goals) + security (OWASP at design) + maintainability (architecture) | PRD, Spec |
+| Code slice | Code review (Fagan) + security (OWASP) + maintainability (SOLID, DRY, code smells) | Spec, arc42 |
+
+Every gate also runs a **drift / traceability check** across PRD → Spec → arc42 → code. When a downstream artifact has drifted from an upstream change, reconcile it as part of the gate.
+
+Reviewers post their findings as **comments on the deliverable's PR**, each finding classified blocking (must-fix) or non-blocking.
+
+Then react autonomously in a **fix loop**: address findings with concrete changes, re-review, repeat. Terminate when no blocking findings remain, or after **3 rounds** — whichever comes first. Post any remaining non-blocking findings as a PR comment for the user instead of looping further.
+
+The loop is **fully autonomous, including product and architecture decisions** — it resolves tradeoffs itself rather than waiting. To keep autonomous decisions visible and reversible, record each one where it belongs (an inferred ADR with status "Accepted (inferred)" for architecture choices; an explicit note in the artifact otherwise) and call it out in the PR comment, so the user can override on review.
+
 ## Docs-as-Code
 
 Documentation follows Docs-as-Code according to Ralf D. Müller:
