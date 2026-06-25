@@ -49,10 +49,13 @@
     @media (max-width: 760px) { .exchange { grid-template-columns: 1fr; } }
     fieldset { border: 1px solid #2b313a; border-radius: 8px; padding: .75rem; }
     legend { padding: 0 .4rem; color: #9aa3ad; font-size: .8rem; }
-    textarea, input.url { width: 100%; background: #0d0f12; color: #cfd4da;
+    textarea { width: 100%; background: #0d0f12; color: #cfd4da;
       border: 1px solid #2b313a; border-radius: 6px; padding: .5rem;
       font-family: ui-monospace, monospace; font-size: .72rem; }
     textarea { min-height: 70px; resize: vertical; }
+    .invitelink { display: inline-block; margin: .4rem 0 .1rem; color: #7fb0ff; font-size: .9rem;
+      text-decoration: none; font-weight: 600; }
+    .invitelink:hover { text-decoration: underline; }
     .row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
     label.step { display: block; font-size: .8rem; margin: 0 0 .3rem; color: #cfd4da; }
     .hint { font-size: .78rem; color: #9aa3ad; margin: .35rem 0 0; }
@@ -101,7 +104,7 @@
       <legend>Einladen (Host)</legend>
       <label class="step">A · Einladung erstellen und verschicken</label>
       <button id="createInvite" disabled>Einladung erstellen</button>
-      <input class="url" id="inviteUrl" type="text" readonly placeholder="Einladungs-Link erscheint hier." />
+      <a id="inviteLink" class="invitelink hidden" target="_blank" rel="noopener noreferrer"></a>
       <div class="row">
         <button id="shareInvite" class="secondary hidden">Teilen</button>
         <button id="copyInvite" class="secondary" disabled>Link kopieren</button>
@@ -119,7 +122,7 @@
         <button id="joinAnswer" class="secondary hidden">Beitreten &amp; Antwort erzeugen</button>
       </div>
       <label class="step hidden" id="answerLabel" style="margin-top:.6rem;">C · Antwort zurückschicken</label>
-      <input class="url hidden" id="answerUrl" type="text" readonly placeholder="Antwort-Link erscheint hier." />
+      <a id="answerLink" class="invitelink hidden" target="_blank" rel="noopener noreferrer"></a>
       <div class="row">
         <button id="shareAnswer" class="secondary hidden">Antwort teilen</button>
         <button id="copyAnswer" class="secondary hidden">Antwort kopieren</button>

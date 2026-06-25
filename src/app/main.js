@@ -240,7 +240,7 @@ $("createInvite").addEventListener("click", async () => {
     if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
     ensureMesh(true);
     const offer = await mesh.createBootstrapOffer();
-    $("inviteUrl").value = await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS);
+    setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
     $("copyInvite").disabled = false; $("mailInvite").disabled = false;
     applyShareChannels("shareInvite", "mailInvite"); // share/mailto controlled by visibility, not disabled
     bootstrapPending = true;
@@ -270,7 +270,7 @@ $("loadIncoming").addEventListener("click", async () => {
       await mesh.acceptBootstrapAnswer(payload.sdp);
       bootstrapPending = false;
       $("createInvite").disabled = false;
-      $("inviteUrl").value = ""; $("incomingIn").value = "";
+      clearLink("inviteLink"); $("incomingIn").value = "";
       $("copyInvite").disabled = true; $("mailInvite").disabled = true;
       show("shareInvite", false);
       status("Teilnehmer verbunden. Lade weitere ein oder bleib einfach im Call — das Mesh verbindet sich selbst.");
@@ -287,8 +287,8 @@ $("joinAnswer").addEventListener("click", async () => {
   try {
     ensureMesh(false);
     const answer = await mesh.joinWithOffer(pendingOffer);
-    $("answerUrl").value = await buildCapabilityUrl("answer", roomId, answer);
-    show("answerLabel", true); show("answerUrl", true);
+    setLink("answerLink", await buildCapabilityUrl("answer", roomId, answer), ANSWER_MSG.linkLabel);
+    show("answerLabel", true);
     show("copyAnswer", true); applyShareChannels("shareAnswer", "mailAnswer");
     show("joinAnswer", false);
     status("Antwort erzeugt. Schick sie dem Host zurück — danach verbindet sich das Mesh automatisch.");
@@ -302,8 +302,8 @@ $("joinAnswer").addEventListener("click", async () => {
 // Copy works everywhere; native share where the platform has it, else mailto as
 // the desktop fallback (#42). One path is offered, never a dead button. The
 // subject/intro live in one place so the share and mailto wordings cannot drift.
-const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:" };
-const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:" };
+const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:", linkLabel: "ultrathink.call-Einladung" };
+const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:", linkLabel: "ultrathink.call-Antwort" };
 
 function applyShareChannels(shareId, mailId) {
   const native = canNativeShare();
@@ -311,27 +311,34 @@ function applyShareChannels(shareId, mailId) {
   show(mailId, !native);
 }
 
-const copy = (id) => navigator.clipboard.writeText($(id).value).then(() => status("In die Zwischenablage kopiert."));
-$("copyInvite").addEventListener("click", () => copy("inviteUrl"));
-$("copyAnswer").addEventListener("click", () => copy("answerUrl"));
+// The capability-URL is shown as a compact link (#44): short visible text, the
+// full URL in `href`. These three helpers keep that in one place — the buttons
+// below read the URL back via linkUrl().
+function setLink(id, url, label) { const a = $(id); a.href = url; a.textContent = label + " ↗"; show(id, true); }
+function clearLink(id) { const a = $(id); a.removeAttribute("href"); a.textContent = ""; show(id, false); }
+const linkUrl = (id) => $(id).getAttribute("href") || "";
+
+const copy = (id) => navigator.clipboard.writeText(linkUrl(id)).then(() => status("In die Zwischenablage kopiert."));
+$("copyInvite").addEventListener("click", () => copy("inviteLink"));
+$("copyAnswer").addEventListener("click", () => copy("answerLink"));
 
 // navigator.share rejects with AbortError when the user dismisses the sheet —
 // that is not an error, so swallow it (acceptance: cancel = no state change).
 // `err` is not guaranteed to be an Error, so reach into it defensively.
-async function shareLink({ subject, intro }, urlId) {
+async function shareLink({ subject, intro }, linkId) {
   try {
-    await navigator.share(shareData(subject, intro, $(urlId).value));
+    await navigator.share(shareData(subject, intro, linkUrl(linkId)));
   } catch (err) {
     if (err?.name !== "AbortError") status("Teilen fehlgeschlagen: " + (err?.message ?? err));
   }
 }
-$("shareInvite").addEventListener("click", () => shareLink(INVITE_MSG, "inviteUrl"));
-$("shareAnswer").addEventListener("click", () => shareLink(ANSWER_MSG, "answerUrl"));
+$("shareInvite").addEventListener("click", () => shareLink(INVITE_MSG, "inviteLink"));
+$("shareAnswer").addEventListener("click", () => shareLink(ANSWER_MSG, "answerLink"));
 $("mailInvite").addEventListener("click", () => {
-  location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, $("inviteUrl").value);
+  location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, linkUrl("inviteLink"));
 });
 $("mailAnswer").addEventListener("click", () => {
-  location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, $("answerUrl").value);
+  location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, linkUrl("answerLink"));
 });
 
 // --- Screen sharing (applies to every peer) --------------------------------------

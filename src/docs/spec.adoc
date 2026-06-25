@@ -70,7 +70,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 . Host starts camera and microphone (→ UC-3).
 . Host requests an invite.
 . System generates a room id (BR-2), creates a WebRTC offer, gathers ICE candidates, and encodes offer + room id into a capability-URL (→ SYS-UC-1).
-. System shows the invite URL and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
+. System shows the invite as a compact link (#44 — short text, full capability-URL in `href`) and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
 . Host sends the invite to the Guest over their own mail client (BR-4).
 . Host receives the Guest's answer token and loads it (→ SYS-UC-2).
 . System applies the answer; the connection establishes (BR-3); remote media appears.
@@ -95,7 +95,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 . Guest opens the invite URL; System detects and validates the embedded offer (→ SYS-UC-2) and shows the room id.
 . Guest starts camera and microphone (→ UC-3).
 . Guest joins; System applies the offer, creates an answer, gathers ICE, and encodes the answer into a capability-URL (→ SYS-UC-3).
-. System shows the answer URL and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
+. System shows the answer as a compact link (#44) and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
 . Guest returns the answer to the Host (BR-4).
 . Connection establishes (BR-3); remote media appears.
 
@@ -181,7 +181,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 
 * *Input*: local media stream; a freshly generated room id (BR-2).
 * *Processing*: create offer → set local description → gather ICE (bounded by a timeout) → build payload `{v:1, room, kind:"offer", sdp}` → gzip (if it shrinks the payload) → base64url → tag `g`/`r` → prefix as `#invite=`.
-* *Output*: a capability-URL `https://…/#invite=<token>` (IC-1/IC-2).
+* *Output*: a capability-URL `https://…/#invite=<token>` (IC-1/IC-2), presented as a compact link — short text, full URL in `href` (#44).
 * *Errors*: media missing → abort with message; offer/ICE failure → reset and report.
 
 === SYS-UC-2 Consume an incoming capability token
@@ -313,7 +313,8 @@ stop
 Scenario: Host creates an invite
   Given the host has started camera and microphone
   When the host requests an invite
-  Then a capability-URL containing "#invite=" is shown
+  Then a compact link is shown whose href is a capability-URL containing "#invite="
+  And the long token is not rendered as visible text (#44)
   And the room id matches the UUIDv4 pattern
   And a copy action plus exactly one hand-off channel (native share or mailto) are offered
 

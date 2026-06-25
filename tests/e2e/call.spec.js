@@ -10,15 +10,15 @@ const newPeer = async (browser) => {
 // Host bootstraps one guest: create invite -> guest joins -> host accepts answer.
 async function bootstrap(host, guest) {
   await host.click("#createInvite");
-  await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
-  const invite = await host.locator("#inviteUrl").inputValue();
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  const invite = await host.locator("#inviteLink").getAttribute("href");
 
   await guest.goto(invite);
   await guest.click("#startCam");
   await expect(guest.locator("#joinAnswer")).toBeVisible();
   await guest.click("#joinAnswer");
-  await expect(guest.locator("#answerUrl")).not.toHaveValue("", { timeout: 15000 });
-  const answer = await guest.locator("#answerUrl").inputValue();
+  await expect(guest.locator("#answerLink")).toHaveAttribute("href", /#answer=/, { timeout: 15000 });
+  const answer = await guest.locator("#answerLink").getAttribute("href");
 
   await host.fill("#incomingIn", answer);
   await host.click("#loadIncoming");
@@ -109,7 +109,7 @@ test("invite offers exactly one of native-share or mailto, plus copy (#42)", asy
   await host.goto("/");
   await host.click("#startCam");
   await host.click("#createInvite");
-  await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
 
   await expect(host.locator("#copyInvite")).toBeVisible();   // copy is the universal fallback
   // share XOR mailto — one distribution path is offered, never both, never a dead button.
@@ -125,11 +125,25 @@ test("without the Web Share API the invite falls back to mailto (#42)", async ({
   await host.goto("/");
   await host.click("#startCam");
   await host.click("#createInvite");
-  await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
 
   await expect(host.locator("#mailInvite")).toBeVisible();    // fallback present
   await expect(host.locator("#shareInvite")).toBeHidden();    // native share not offered
   await expect(host.locator("#copyInvite")).toBeVisible();    // copy always
+});
+
+test("the invite is shown as a compact link, not a raw URL string (#44)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  await host.goto("/");
+  await host.click("#startCam");
+  await host.click("#createInvite");
+
+  const link = host.locator("#inviteLink");
+  await expect(link).toHaveAttribute("href", /#invite=/, { timeout: 15000 }); // full URL in href
+  await expect(link).toBeVisible();
+  const text = await link.textContent();
+  expect(text).not.toContain("#invite=");   // the long token is never visible as text
+  expect(text.length).toBeLessThan(40);      // compact label
 });
 
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
