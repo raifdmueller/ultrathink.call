@@ -80,8 +80,10 @@ endpoint is genuinely less reliable than Google's anycast (the R-2 cost, now
 visible in the matrix). The tie is broken by *QG-1 (sovereignty)*, the
 top-ranked quality goal (Chapter 1.2).
 
-*Consequences*: removes the G-1 violation in the media path; creates *R-2*
-(single interim endpoint availability) until D-9 adds vetted fallbacks.
+*Consequences*: removes the G-1 violation in the media path. D-9 is now done —
+a sovereign (DE) STUN set with fallbacks (Nextcloud, sipgate, 1&1) replaces the
+single interim endpoint, reducing *R-2* (a unit test asserts no US host, SM-2).
+Uptime monitoring of the chosen endpoints stays operational.
 
 === ADR-4 Topology for the ~20-participant training case
 

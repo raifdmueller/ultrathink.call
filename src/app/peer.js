@@ -2,7 +2,18 @@
 // control data channel ("ctrl") used by the mesh to relay guest↔guest signaling
 // over the host (no external broker — ADR-8). A mesh is a map of PeerSessions.
 
-export const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.nextcloud.com:443" }] };
+// Sovereign (non-US) STUN set with fallbacks (D-9). All endpoints are operated in
+// the EU (DE); ICE tries them all and uses whichever responds. Uptime/vetting is
+// an operational concern (R-2). No US provider here (SM-2).
+export const ICE_CONFIG = {
+  iceServers: [
+    { urls: [
+      "stun:stun.nextcloud.com:443", // Nextcloud GmbH (DE)
+      "stun:stun.sipgate.net:3478",  // sipgate GmbH (DE)
+      "stun:stun.1und1.de:3478",     // 1&1 / IONOS (DE)
+    ] },
+  ],
+};
 export const ICE_TIMEOUT_MS = 4000;
 export const MAX_CTRL = 200000; // cap an inbound ctrl message (anti-DoS), mirrors MAX_TOKEN
 

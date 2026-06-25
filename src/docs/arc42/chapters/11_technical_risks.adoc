@@ -21,7 +21,7 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | R-7 | Low | High | *High* | Signaling-path tampering. Host↔guest: M-1 (DTLS-fingerprint check, VR-9) + fingerprint over the capability channel (ADR-2). Mesh guest↔guest: relayed SDP is validated against a malicious *guest* (VR-9 on the mesh, authoritative `from`), but a malicious *host* could MITM guest↔guest media — *accepted residual* (trusted host, ADR-8).
 | R-3 | Med | Med | *Med* | M-4 (token is the bearer secret, CSPRNG room id, advisory share-carefully); single-use/expiring tokens deferred. *Same root cause as R-9* (a leaked link with no moderation) — treat as one bearer-secret-without-moderation cluster.
 | R-10 | Low | High | *Med* | One step removed (needs host/CDN/dependency compromise first). M-2 (CSP, no external scripts); SRI + Trusted Types deferred — required before the R3 WASM blur model ships.
-| R-2 | Med | Med | *Med* | S-5 (swappable endpoints) + D-9 vetted sovereign STUN set with fallbacks.
+| R-2 | Low | Med | *Low* | D-9 done: a sovereign DE STUN set with fallbacks (Nextcloud, sipgate, 1&1) + S-5 swappable endpoints. Residual is endpoint uptime (operational).
 | R-6 | High | Low | *Med* | Disclosed (EARS-10, T-005b); TURN relay is the deferred mitigation (issue #4) — adding it trades against G-2.
 | R-9 | Med | Med | *Med* | Host admit/kick/mute raised to Should scope; not yet built (will close T-009). Clustered with R-3.
 | R-4 | Med | Med | *Med* | Fail-closed blur on model-load failure; bounded by QS-5; perf-vs-CPU watched against QG-3.
@@ -36,7 +36,7 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 |===
 | ID | Debt — and the building block it burdens | Tracking
 | TD-1 | *Resolved (EPIC 1):* signaling extracted to a port (`src/app/signaling.js`) and a pure, unit-tested codec (`src/app/codec.js`); the broker is now a drop-in second adapter. Was: BB-4/BB-5. | issue #7 (done)
-| TD-2 | A single interim STUN with no vetted sovereign set or fallbacks. Burdens *BB-3 Peer Connection* (ICE config). | D-9 / R2
+| TD-2 | *Resolved (#24):* a sovereign DE STUN set with fallbacks replaces the single interim endpoint; a unit test asserts non-US hosts. | issue #24 (done)
 | TD-3 | No automatic reconnect and no `RTCPeerConnection` teardown on failure. Burdens *BB-3 Peer Connection*. | R0-noted limitation
 | TD-4 | *Resolved (EPIC 1):* a `PeerSession` class (`src/app/peer.js`) replaces the global `pc`; the R2 mesh becomes a map of sessions, not a rewrite. | issue #7 (done)
 | TD-5 | *Partly resolved (EPIC 1):* unit tests (codec/VR) and a Playwright E2E exist and run in CI; the integration layer follows with the R2 broker adapter. Burdens *BB-5*/*BB-6*. | issue #20
