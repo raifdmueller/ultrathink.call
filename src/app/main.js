@@ -4,6 +4,7 @@
 import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
 import { AdaptController, TIERS, SAMPLE_INTERVAL_MS } from "./adapt.js";
+import { NativeBlurProcessor, supportsBlur, UNSUPPORTED_MSG } from "./blur.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
@@ -18,6 +19,7 @@ let camTrack = null;
 let pendingOffer = null;       // guest: the host's offer awaiting join
 let bootstrapPending = false;  // host: an invite is out, awaiting its answer
 let sharing = false;           // a screen share is active
+let blurOn = false;            // background blur requested by the user (#25)
 let roomId = null;
 
 const setRoom = () => { if (roomId) $("roomLine").textContent = "Raum: " + roomId; };
@@ -126,6 +128,7 @@ $("startCam").addEventListener("click", async () => {
     // Screen sharing exists only in desktop browsers (not iOS/Android) — #34.
     $("shareScreen").disabled = !navigator.mediaDevices?.getDisplayMedia;
     if (!navigator.mediaDevices?.getDisplayMedia) $("shareScreen").title = "Auf diesem Browser/Gerät nicht verfügbar (z. B. mobil).";
+    refreshBlurAvailability(); // #25: only offer blur where the platform can deliver it
     $("createInvite").disabled = false;
     if (pendingOffer) show("joinAnswer", true);
     await populateDevices();
@@ -175,12 +178,58 @@ async function switchTrack(kind, deviceId) {
     mesh?.setStream(localStream);
     $("localVideo").srcObject = localStream;
     status("Gerät gewechselt.");
+    if (kind === "video") {
+      // The new camera track carries no blur; re-evaluate and re-apply, failing
+      // closed (blur off + warn) if this device cannot blur (#25).
+      refreshBlurAvailability();
+      if (blurOn) {
+        try { await applyBlur(true); }
+        catch { revertBlur("Blur auf der neuen Kamera nicht verfügbar — aus."); }
+      }
+    }
   } catch (err) {
     status("Gerätewechsel fehlgeschlagen: " + err.message);
   }
 }
 $("camSelect").addEventListener("change", () => switchTrack("video", $("camSelect").value));
 $("micSelect").addEventListener("change", () => switchTrack("audio", $("micSelect").value));
+
+// --- Background blur (#25, BB-9): native, fail-closed -----------------------------
+// We only ever offer blur the platform can actually deliver, and we never report
+// "blur on" unless the platform confirmed it (fail-closed, arc42 8.5).
+const BLUR_OFF_LABEL = "Hintergrund verwischen";
+const BLUR_ON_LABEL = "Hintergrund anzeigen";
+
+function refreshBlurAvailability() {
+  // A screen share owns the outgoing video; blur applies to the camera, so the
+  // toggle is meaningless mid-share.
+  const ok = !sharing && !!camTrack && supportsBlur(camTrack);
+  $("blurToggle").disabled = !ok;
+  $("blurToggle").title = ok ? "" : UNSUPPORTED_MSG;
+}
+
+async function applyBlur(on) {
+  // setEnabled confirms the effect engaged (read-back) or throws → we fail closed.
+  blurOn = await new NativeBlurProcessor(camTrack).setEnabled(on);
+  $("blurToggle").textContent = blurOn ? BLUR_ON_LABEL : BLUR_OFF_LABEL;
+}
+
+// Fail closed: forget the blur claim, reset the label, warn. One place so the
+// toggle, the device switch, and the share-restore paths cannot drift.
+function revertBlur(msg) {
+  blurOn = false;
+  $("blurToggle").textContent = BLUR_OFF_LABEL;
+  status(msg);
+}
+
+$("blurToggle").addEventListener("click", async () => {
+  try {
+    await applyBlur(!blurOn);
+    status(blurOn ? "Hintergrund wird verwischt." : "Hintergrund-Blur aus.");
+  } catch (err) {
+    revertBlur("Hintergrund-Blur fehlgeschlagen: " + err.message);
+  }
+});
 
 // --- Host: create an invite for the next guest -----------------------------------
 $("createInvite").addEventListener("click", async () => {
@@ -274,6 +323,7 @@ $("shareScreen").addEventListener("click", async () => {
     $("localVideo").srcObject = display;
     show("deviceRow", false);
     $("shareScreen").disabled = true; $("stopShare").disabled = false;
+    refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
     screenTrack.addEventListener("ended", restoreCamera);
   } catch (err) {
@@ -289,6 +339,13 @@ async function restoreCamera() {
   show("deviceRow", true);
   $("shareScreen").disabled = false; $("stopShare").disabled = true;
   status("Zurück auf Kamera.");
+  // The restored camera frame is unblurred until re-applied; re-assert the blur
+  // state fail-closed so we never show the camera blurred when it is not (#25).
+  refreshBlurAvailability();
+  if (blurOn) {
+    try { await applyBlur(true); }
+    catch { revertBlur("Blur nach dem Teilen nicht wiederhergestellt — aus."); }
+  }
 }
 
 // --- On load: auto-detect an invite in the URL -----------------------------------

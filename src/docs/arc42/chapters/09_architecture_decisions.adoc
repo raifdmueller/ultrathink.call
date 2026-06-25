@@ -16,6 +16,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-6 | Static host: GitHub Pages interim, target Codeberg Pages (DE) | Accepted
 | ADR-7 | ES modules + dev-only test tooling (no app build) | Accepted (inferred)
 | ADR-8 | Mesh without a broker — host-relayed signaling | Accepted (owner)
+| ADR-9 | Background blur via the platform, not a vendored model | Accepted (owner)
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -214,3 +215,43 @@ validated (DTLS fingerprint, VR-9 on the mesh) and the host stamps the
 authoritative sender id, so a guest cannot downgrade encryption or impersonate a
 peer. Practically caps at a small mesh — the ~20 training case remains
 R-1/ADR-4. Realized in `src/app/mesh.js`.
+
+=== ADR-9 Background blur via the platform, not a vendored model
+
+*Status*: Accepted (owner decision, R3). *Context*: R3 wants client-side
+background blur (G-5, SM-4) — the privacy feature that should beat Jitsi's weak
+virtual background. Real segmentation needs a model. A model has to come from
+somewhere, and every "somewhere" collides with a core principle: an external CDN
+breaks the strict CSP (`script-src 'self'`, ADR-7) and sovereignty (G-1); a
+*vendored* model adds multi-MB binaries to the repo and reopens the supply-chain
+threat (T-003 / R-10), forcing the #26 gate (SRI + Trusted Types) before it can
+ship. *Decision*: delegate to the *platform's own* background blur — the
+MediaStreamTrack `backgroundBlur` capability (ChromeOS, Windows Studio Effects) —
+applied through the video-processing port (BB-9). No model is fetched, so CSP and
+sovereignty hold and #26 is *not* triggered. Where the platform cannot blur, the
+toggle is unavailable and we never report a blur we cannot deliver (fail-closed).
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Vendored WASM model — datum | Native platform blur | External CDN model
+| Sovereignty (G-1) | 0 | 0 | -1
+| Strict CSP unchanged (ADR-7) | 0 | +1 | -1
+| No new supply-chain risk (T-003) | 0 | +1 | -1
+| Blur quality / coverage | 0 | -1 | 0
+| Works on every browser | 0 | -1 | 0
+| *Sum* | *0* | *0* | *-3*
+|===
+
+The native option ties the vendored datum: it trades blur quality and universal
+availability for an unchanged CSP and no new supply-chain risk. The owner broke
+the tie toward *native* — keep the principles intact now, accept that blur is
+only offered where the platform delivers it.
+
+*Consequences*: blur ships with no model, no CSP change, no new dependency; on
+platforms without the capability the feature is simply absent (a coverage gap,
+*R-14*, not a security risk). The vendored-model path stays open as a future
+video-processing adapter behind the same port; if it is ever taken, #26
+(SRI/Trusted Types, T-003/R-10) becomes a hard prerequisite again. Fail-closed
+(arc42 8.5) is adapted for the no-model case: we never present an unblurred frame
+as blurred — on any failure the toggle reverts and warns. Realized in
+`src/app/blur.js`.

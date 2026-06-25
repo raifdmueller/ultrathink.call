@@ -13,7 +13,7 @@ Chapter 1.2 maps to a named approach here.
 | S-3 | Capability-URL signaling | The SDP is carried in the URL fragment and distributed via the host's own `mailto:`; the token is the bearer secret. No login, no signaling backend (ADR-2). | QG-1, QG-2
 | S-4 | Graceful media degradation | Adaptive bitrate/resolution under CPU/bandwidth pressure so the stream degrades instead of dropping (R4 slice; the alfaview failure must not recur). Realized by BB-8 (`adapt.js` + `getStats`/`setParameters`). | QG-3
 | S-5 | Ports and adapters | Signaling, ICE, and video processing sit behind ports; each external dependency is swappable, preventing new lock-in (ADR-5). | QG-1, QG-4
-| S-6 | Client-side privacy | Background blur runs in the browser before the frame is encoded, so surroundings never leave the device (R3 slice). | QG-5
+| S-6 | Client-side privacy | Background blur runs in the browser before the frame is encoded, so surroundings never leave the device (R3 slice). Realized via the platform's native blur (BB-9, ADR-9) — no model fetched, CSP unchanged. | QG-5
 |===
 
 The walking-skeleton-then-slices method (OC-4) keeps every increment deployable;

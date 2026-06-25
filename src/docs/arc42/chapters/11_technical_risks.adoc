@@ -24,7 +24,8 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | R-2 | Low | Med | *Low* | D-9 done: a sovereign DE STUN set with fallbacks (Nextcloud, sipgate, 1&1) + S-5 swappable endpoints. Residual is endpoint uptime (operational).
 | R-6 | High | Low | *Med* | Disclosed (EARS-10, T-005b); TURN relay is the deferred mitigation (issue #4) — adding it trades against G-2.
 | R-9 | Low | Med | *Low* | *Mitigated* by M-8 (#28): the host can kick or mute any peer over its `ctrl` channels, closing T-009's disruption path. Residual: no *admit* gate (a peer with a valid, unexpired link still joins before it can be kicked) — clustered with R-3, bounded by M-9 expiry.
-| R-4 | Med | Med | *Med* | Fail-closed blur on model-load failure; bounded by QS-5; perf-vs-CPU watched against QG-3.
+| R-4 | Low | Med | *Low* | *Reduced* by ADR-9: blur is native (no model fetched), so the model-load-failure path is gone and T-003/R-10 are not reopened. Residual is fail-closed UX — we never present an unblurred frame as blurred (BB-9, arc42 8.5).
+| R-14 | Med | Low | *Low* | Blur coverage gap: native `backgroundBlur` exists only on some platforms (ChromeOS, Windows Studio Effects), so on others the feature is simply absent (ADR-9). Not a security risk; a feature-availability limitation. Mitigation: the toggle is disabled with an explanatory tooltip; a future vendored-model adapter (#26) would close the gap.
 | R-8 | Low | Med | *Low* | M-6 (prefer single window + pre-share warning).
 | R-13 | Med | Low | *Low* | Zero-egress (G-9) means no remote diagnostics; field failures are user-reported only. Accepted trade from ADR-1; no mitigation planned.
 | R-5 | Low | Low | *Low* | Accepted; browser-only, no native mobile (no mitigation planned).

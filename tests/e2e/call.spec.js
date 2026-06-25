@@ -94,6 +94,16 @@ test("the host can kick a guest out of the mesh (#28)", async ({ browser }) => {
   await expect(g1.locator("#status")).toContainText("entfernt");
 });
 
+test("background blur is offered only where the platform supports it (#25, fail-closed)", async ({ browser }) => {
+  const { page } = await newPeer(browser);
+  await page.goto("/");
+  await page.click("#startCam");
+  // Headless Chromium with fake media exposes no native backgroundBlur capability,
+  // so the toggle must stay disabled — we never offer a blur we cannot deliver.
+  await expect(page.locator("#blurToggle")).toBeDisabled();
+  await expect(page.locator("#blurToggle")).toHaveAttribute("title", /nicht unterstützt/);
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");
