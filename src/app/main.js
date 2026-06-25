@@ -268,14 +268,15 @@ function appendChat(who, text) {
   const name = document.createElement("strong");
   name.textContent = who + ": ";
   line.append(name, document.createTextNode(text));
-  $("chatLog").append(line);
-  $("chatLog").scrollTop = $("chatLog").scrollHeight;
+  const log = $("chatLog");
+  log.append(line);
+  while (log.childElementCount > 200) log.firstChild.remove(); // bound the DOM (anti-flood)
+  log.scrollTop = log.scrollHeight;
 }
 function sendChat() {
   const text = $("chatInput").value.trim();
   if (!text || !mesh) return;
-  mesh.sendChat(text);     // broadcast to every connected peer
-  appendChat("Du", text);  // echo locally
+  appendChat("Du", mesh.sendChat(text)); // echo exactly the (capped) line the peers got
   $("chatInput").value = "";
 }
 $("chatSend").addEventListener("click", sendChat);
