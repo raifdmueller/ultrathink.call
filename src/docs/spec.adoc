@@ -70,7 +70,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 . Host starts camera and microphone (→ UC-3).
 . Host requests an invite.
 . System generates a room id (BR-2), creates a WebRTC offer, gathers ICE candidates, and encodes offer + room id into a capability-URL (→ SYS-UC-1).
-. System shows the invite URL and offers a `mailto:` draft (→ SYS-UC-5) and a copy action.
+. System shows the invite URL and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
 . Host sends the invite to the Guest over their own mail client (BR-4).
 . Host receives the Guest's answer token and loads it (→ SYS-UC-2).
 . System applies the answer; the connection establishes (BR-3); remote media appears.
@@ -95,7 +95,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 . Guest opens the invite URL; System detects and validates the embedded offer (→ SYS-UC-2) and shows the room id.
 . Guest starts camera and microphone (→ UC-3).
 . Guest joins; System applies the offer, creates an answer, gathers ICE, and encodes the answer into a capability-URL (→ SYS-UC-3).
-. System shows the answer URL and offers a `mailto:` draft (→ SYS-UC-5) and a copy action.
+. System shows the answer URL and offers to hand it off (native share or `mailto:`, → SYS-UC-5) and a copy action.
 . Guest returns the answer to the Host (BR-4).
 . Connection establishes (BR-3); remote media appears.
 
@@ -206,12 +206,12 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 * *Output/status*: updated local preview and outgoing track; a status message.
 * *Errors*: acquisition failure → report, keep previous track.
 
-=== SYS-UC-5 Compose a `mailto:` invite
+=== SYS-UC-5 Hand off an invite (native share or `mailto:`)
 
 * *Input*: a subject, an intro text, and a capability-URL (invite or answer).
-* *Processing*: URL-encode subject and body (intro + capability-URL), then navigate to `mailto:?subject=…&body=…` (IC-3). The System never sends the mail (BR-4).
-* *Output*: a pre-filled draft in the actor's own mail client.
-* *Errors*: no configured mail client → the OS/browser handles it; the copy action is the fallback.
+* *Processing*: pick the distribution channel by capability (#42). Where the Web Share API is present, navigate the OS share sheet via `navigator.share({title, text, url})` — routing to whatever channel the device has (messenger, RCS, mail, AirDrop). Where it is absent, fall back to a `mailto:` draft (`mailto:?subject=…&body=…`, IC-3). The clipboard *copy* action is always available. The System never sends anything itself (BR-4).
+* *Output*: the OS share sheet, or a pre-filled mail draft, or the link on the clipboard.
+* *Errors*: native share dismissed by the user → no error, no state change. No mail client / no share API → the copy action is the universal fallback.
 
 === SYS-UC-6 Issue a moderation command
 
@@ -315,7 +315,7 @@ Scenario: Host creates an invite
   When the host requests an invite
   Then a capability-URL containing "#invite=" is shown
   And the room id matches the UUIDv4 pattern
-  And a mailto draft and a copy action are offered
+  And a copy action plus exactly one hand-off channel (native share or mailto) are offered
 
 # UC-1 extension — covers BR-6
 Scenario: A second invite is refused with a message
@@ -422,6 +422,8 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-16 | While a call is running, when the browser reports the outgoing video as CPU- or bandwidth-limited for a sustained interval, the system shall step the local encoding down through fixed tiers, and shall not drop below 10 fps. (SM-3, QS-3, BB-8)
 | EARS-17 | While the encoding is stepped down, when the limitation clears for a sustained interval, the system shall step the encoding back up one tier at a time. (QS-3, BB-8)
 | EARS-18 | Where the platform exposes native background blur, the system shall offer a blur toggle and apply it to the camera track; elsewhere it shall disable the toggle and shall not present an unblurred frame as blurred. (BR-11, SM-4, QS-5)
+| EARS-19 | Where the platform exposes the Web Share API, the system shall offer a native-share action for the invite/answer link; elsewhere it shall offer a `mailto:` action; the clipboard copy action is always offered. (SYS-UC-5, #42)
+| EARS-20 | When the user dismisses the native share sheet, the system shall treat it as a no-op — no error and no state change. (SYS-UC-5, #42)
 |===
 
 == Entities, states, and contracts complete the picture
@@ -506,10 +508,19 @@ base64url      = 1*( ALPHA | DIGIT | "-" | "_" )   ; no padding
 * `room` — UUIDv4 string.
 * `sdp` — a WebRTC `RTCSessionDescriptionInit`; must contain a DTLS fingerprint.
 
-*IC-3 — `mailto:` invite*
+*IC-3 — Invite hand-off (two channels)*
+
+`mailto:` (fallback where the Web Share API is absent):
 
 ----
 mailto:?subject=<url-encoded subject>&body=<url-encoded intro + capability-url>
+----
+
+Native share (preferred where available, #42):
+
+[source,json]
+----
+navigator.share({ "title": <subject>, "text": <intro>, "url": <capability-url> })
 ----
 
 The body carries the capability-URL; the System never sends the mail (BR-4).
