@@ -16,7 +16,10 @@ export async function buildCapabilityUrl(kind, room, sdp, exp) {
   return `${baseUrl()}#${fragment}=${token}`;
 }
 
-// True if an invite payload carries an expiry that has passed.
+// True if an invite payload carries an expiry that has passed. `exp` rides inside
+// the (unsigned) capability token, so it is advisory hygiene — auto-invalidating a
+// stale or forwarded link — not an enforced TTL: a token holder can re-encode it.
+// The token itself stays the bearer secret (BR-1); expiry only bounds replay.
 export const isExpired = (payload) => typeof payload.exp === "number" && Date.now() > payload.exp;
 
 export async function parseIncoming(text) {

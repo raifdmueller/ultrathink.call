@@ -5,6 +5,7 @@ import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
+const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
@@ -22,6 +23,22 @@ const setRoom = () => { if (roomId) $("roomLine").textContent = "Raum: " + roomI
 const getMedia = (c) => navigator.mediaDevices.getUserMedia(c);
 
 // --- remote tiles, one per peer --------------------------------------------------
+// Host-only kick/mute controls for one guest tile (#28). Kept separate from the
+// tile factory so setTile stays pure composition (IOSP).
+function moderationControls(peerId) {
+  const ctl = document.createElement("div");
+  ctl.className = "modctl";
+  const kick = document.createElement("button");
+  kick.textContent = "Entfernen";
+  kick.addEventListener("click", () => mesh.kick(peerId));
+  const mute = document.createElement("button");
+  let muted = false;
+  mute.textContent = "Stumm";
+  mute.addEventListener("click", () => { muted = !muted; mesh.setMuted(peerId, muted); mute.textContent = muted ? "Laut" : "Stumm"; });
+  ctl.append(kick, mute);
+  return ctl;
+}
+
 function setTile(peerId, stream) {
   let tile = document.getElementById("tile-" + peerId);
   if (!tile) {
@@ -33,25 +50,16 @@ function setTile(peerId, stream) {
     const label = document.createElement("span");
     label.textContent = peerId === "host" ? "Host" : "Gast " + peerId.replace(/^p/, "");
     tile.append(v, label);
-    // Host moderation controls per guest tile (#28).
-    if (mesh?.isHost && peerId !== "host") {
-      const ctl = document.createElement("div");
-      ctl.className = "modctl";
-      const kick = document.createElement("button");
-      kick.textContent = "Entfernen";
-      kick.addEventListener("click", () => mesh.kick(peerId));
-      const mute = document.createElement("button");
-      let muted = false;
-      mute.textContent = "Stumm";
-      mute.addEventListener("click", () => { muted = !muted; mesh.setMuted(peerId, muted); mute.textContent = muted ? "Laut" : "Stumm"; });
-      ctl.append(kick, mute);
-      tile.append(ctl);
-    }
+    if (mesh?.isHost && peerId !== "host") tile.append(moderationControls(peerId));
     $("videos").appendChild(tile);
   }
   tile.querySelector("video").srcObject = stream;
 }
 const removeTile = (peerId) => document.getElementById("tile-" + peerId)?.remove();
+// We were kicked: drop every remote tile and reset, so the call ends cleanly.
+function clearRemoteTiles() {
+  document.querySelectorAll("#videos .tile[id]").forEach((t) => t.remove());
+}
 
 function ensureMesh(isHost) {
   if (!mesh) {
@@ -61,6 +69,7 @@ function ensureMesh(isHost) {
       onPeerStream: (id, s) => setTile(id, s),
       onPeerLeave: (id) => removeTile(id),
       onStatus: (m) => status(m),
+      onKicked: () => { clearRemoteTiles(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
     });
   }
   return mesh;
@@ -161,7 +170,7 @@ $("loadIncoming").addEventListener("click", async () => {
     const payload = await parseIncoming(text);
     if (payload.kind === "offer") {
       if (mesh && mesh.isHost) { status("Du bist Host — du kannst nicht deiner eigenen Einladung beitreten."); return; }
-      if (isExpired(payload)) { status("Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link."); return; }
+      if (isExpired(payload)) { status(EXPIRED_MSG); return; }
       pendingOffer = payload.sdp; roomId = payload.room; setRoom();
       show("joinAnswer", localStream != null);
       status(localStream
@@ -248,7 +257,7 @@ async function restoreCamera() {
   if (!inviteTokenInHash()) return;
   $("incomingIn").value = location.hash;
   parseIncoming(location.hash).then((p) => {
-    if (isExpired(p)) { status("Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link."); return; }
+    if (isExpired(p)) { status(EXPIRED_MSG); return; }
     pendingOffer = p.sdp; roomId = p.room; setRoom();
     if (localStream) show("joinAnswer", true);
     status("Du wurdest eingeladen. Starte Kamera + Mikro, dann „Beitreten & Antwort erzeugen“.");

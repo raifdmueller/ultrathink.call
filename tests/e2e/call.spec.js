@@ -83,10 +83,15 @@ test("the host can kick a guest out of the mesh (#28)", async ({ browser }) => {
   await tileHasStream(host, "p1");
   await tileHasStream(g2, "p1");      // guest2 also sees guest1 via the relay
 
-  // host evicts guest1: its tile disappears for the host and for the other guest.
+  await tileHasStream(g1, "host");    // guest1 is fully in the mesh
+
+  // host evicts guest1: its tile disappears for the host and for the other guest,
+  // and guest1 itself tears down (no dangling tiles, status reports the eviction).
   await host.locator("#tile-p1").getByRole("button", { name: "Entfernen" }).click();
   await expect(host.locator("#tile-p1")).toHaveCount(0);
   await expect(g2.locator("#tile-p1")).toHaveCount(0, { timeout: 15000 });
+  await expect(g1.locator("#videos .tile[id]")).toHaveCount(0, { timeout: 15000 });
+  await expect(g1.locator("#status")).toContainText("entfernt");
 });
 
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
