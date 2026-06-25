@@ -1,48 +1,75 @@
-// End-to-end test (story #20): two browser contexts complete a full call via the
-// capability-URL handshake. Verifies UC-1 (host), UC-2 (join), and SM-5 (link join).
+// End-to-end tests (#20, #21, #22, #23): the capability-URL handshake and the
+// host-relayed mesh. Drives 2 and 3 browser contexts through real WebRTC.
 import { test, expect } from "@playwright/test";
 
-test("two peers connect end to end via the capability-URL handshake", async ({ browser }) => {
-  const ctxHost = await browser.newContext({ permissions: ["camera", "microphone"] });
-  const ctxGuest = await browser.newContext({ permissions: ["camera", "microphone"] });
-  const host = await ctxHost.newPage();
-  const guest = await ctxGuest.newPage();
+const newPeer = async (browser) => {
+  const ctx = await browser.newContext({ permissions: ["camera", "microphone"] });
+  return { ctx, page: await ctx.newPage() };
+};
 
-  // Host: start media, create the invite.
-  await host.goto("/");
-  await host.click("#startCam");
-  await expect(host.locator("#createInvite")).toBeEnabled();
+// Host bootstraps one guest: create invite -> guest joins -> host accepts answer.
+async function bootstrap(host, guest) {
   await host.click("#createInvite");
   await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
   const invite = await host.locator("#inviteUrl").inputValue();
-  expect(invite).toContain("#invite=");
 
-  // Guest: open the invite link, start media, produce an answer.
   await guest.goto(invite);
   await guest.click("#startCam");
   await expect(guest.locator("#joinAnswer")).toBeVisible();
   await guest.click("#joinAnswer");
   await expect(guest.locator("#answerUrl")).not.toHaveValue("", { timeout: 15000 });
   const answer = await guest.locator("#answerUrl").inputValue();
-  expect(answer).toContain("#answer=");
 
-  // Host: load the answer; the connection establishes.
   await host.fill("#incomingIn", answer);
   await host.click("#loadIncoming");
+}
 
-  // Both sides receive remote media and reach a connected state.
-  for (const page of [host, guest]) {
-    await expect
-      .poll(() => page.evaluate(() => document.getElementById("remoteVideo").srcObject !== null), { timeout: 25000 })
-      .toBe(true);
-  }
-  await expect(host.locator("#status")).toContainText("connected", { timeout: 25000 });
+const tileHasStream = (page, id) =>
+  expect.poll(
+    () => page.evaluate((tid) => {
+      const v = document.querySelector(`#tile-${tid} video`);
+      return !!(v && v.srcObject);
+    }, id),
+    { timeout: 30000 }
+  ).toBe(true);
 
-  await ctxHost.close();
-  await ctxGuest.close();
+test("two peers connect via the capability-URL handshake", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+
+  await host.goto("/");
+  await host.click("#startCam");
+  await bootstrap(host, guest);
+
+  await tileHasStream(host, "p1");    // host sees the guest
+  await tileHasStream(guest, "host"); // guest sees the host
 });
 
-test("an invalid pasted token is rejected with no state change", async ({ page }) => {
+test("three peers form a full mesh via host-relayed signaling", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: g1 } = await newPeer(browser);
+  const { page: g2 } = await newPeer(browser);
+
+  await host.goto("/");
+  await host.click("#startCam");
+
+  await bootstrap(host, g1);          // host <-> guest1 (p1)
+  await expect(host.locator("#createInvite")).toBeEnabled();
+  await bootstrap(host, g2);          // host <-> guest2 (p2)
+
+  // host sees both guests
+  await tileHasStream(host, "p1");
+  await tileHasStream(host, "p2");
+  // the guests connect to each other automatically through the host relay
+  await tileHasStream(g1, "p2");
+  await tileHasStream(g2, "p1");
+  // and both still see the host
+  await tileHasStream(g1, "host");
+  await tileHasStream(g2, "host");
+});
+
+test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
+  const { page } = await newPeer(browser);
   await page.goto("/");
   await page.fill("#incomingIn", "totally-not-a-valid-token");
   await page.click("#loadIncoming");

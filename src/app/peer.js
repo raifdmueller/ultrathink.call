@@ -1,11 +1,12 @@
-// Peer Connection (BB-3) — one RTCPeerConnection and its media, wrapped so the
-// R2 mesh becomes a map of PeerSessions instead of a global rewrite (retires TD-4).
+// Peer Connection (BB-3) — one RTCPeerConnection, its media, and an optional
+// control data channel ("ctrl") used by the mesh to relay guest↔guest signaling
+// over the host (no external broker — ADR-8). A mesh is a map of PeerSessions.
 
 export const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.nextcloud.com:443" }] };
 export const ICE_TIMEOUT_MS = 4000;
 
 // Non-trickle ICE: resolve on completion or a timeout so one payload carries all
-// candidates and a single link suffices (a stalled gather still ships candidates).
+// candidates (a stalled gather still ships what it has).
 export function waitForIce(peer, timeoutMs = ICE_TIMEOUT_MS) {
   return new Promise((resolve) => {
     if (peer.iceGatheringState === "complete") return resolve();
@@ -17,17 +18,49 @@ export function waitForIce(peer, timeoutMs = ICE_TIMEOUT_MS) {
 }
 
 export class PeerSession {
-  constructor({ stream, onTrack, onState, iceConfig = ICE_CONFIG }) {
+  // isOfferer creates the ctrl data channel; the answerer receives it.
+  constructor({ stream, isOfferer = false, onTrack, onState, onCtrl, iceConfig = ICE_CONFIG }) {
     this.pc = new RTCPeerConnection(iceConfig);
     this.videoSender = null;
     this.audioSender = null;
+    this.ctrl = null;
+    this._ctrlQueue = [];
+    this._onCtrl = onCtrl;
+
     this.pc.addEventListener("track", (e) => onTrack && onTrack(e.streams[0]));
     this.pc.addEventListener("connectionstatechange", () => onState && onState(this.pc.connectionState));
-    for (const track of stream.getTracks()) {
-      const sender = this.pc.addTrack(track, stream);
-      if (track.kind === "video") this.videoSender = sender;
-      if (track.kind === "audio") this.audioSender = sender;
+
+    if (isOfferer) {
+      this._wireCtrl(this.pc.createDataChannel("ctrl"));
+    } else {
+      this.pc.addEventListener("datachannel", (e) => {
+        if (e.channel.label === "ctrl") this._wireCtrl(e.channel);
+      });
     }
+
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        const sender = this.pc.addTrack(track, stream);
+        if (track.kind === "video") this.videoSender = sender;
+        if (track.kind === "audio") this.audioSender = sender;
+      }
+    }
+  }
+
+  _wireCtrl(ch) {
+    this.ctrl = ch;
+    ch.addEventListener("message", (e) => this._onCtrl && this._onCtrl(JSON.parse(e.data)));
+    ch.addEventListener("open", () => {
+      for (const m of this._ctrlQueue) ch.send(m);
+      this._ctrlQueue = [];
+    });
+  }
+
+  // Send a control object; queues until the channel opens.
+  sendCtrl(obj) {
+    const data = JSON.stringify(obj);
+    if (this.ctrl && this.ctrl.readyState === "open") this.ctrl.send(data);
+    else this._ctrlQueue.push(data);
   }
 
   async createOffer() {

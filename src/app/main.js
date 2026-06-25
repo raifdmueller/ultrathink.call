@@ -1,40 +1,62 @@
-// UI Shell (BB-1) + Media Manager (BB-2) glue. Wires the DOM to the codec,
-// PeerSession, and the manual signaling adapter. Single peer at R1; the mesh
-// (a map of PeerSessions) arrives in R2 (issue #21).
-import { PeerSession } from "./peer.js";
+// UI Shell (BB-1) + Media Manager (BB-2) glue. Drives a MeshSession: the host
+// bootstraps each guest with a capability-URL, then the mesh forms automatically
+// (ADR-8, no broker). One video tile per peer; device/screen changes apply to all.
+import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash } from "./signaling.js";
 
 const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
 const show = (el, yes) => $(el).classList.toggle("hidden", !yes);
 
-let session = null;       // the single PeerSession (mesh = a map of these in R2)
+let mesh = null;
 let localStream = null;
 let camTrack = null;
-let pendingOffer = null;
+let pendingOffer = null;       // guest: the host's offer awaiting join
+let bootstrapPending = false;  // host: an invite is out, awaiting its answer
 let roomId = null;
 
 const setRoom = () => { if (roomId) $("roomLine").textContent = "Raum: " + roomId; };
 const getMedia = (c) => navigator.mediaDevices.getUserMedia(c);
 
-function newSession() {
-  session = new PeerSession({
-    stream: localStream,
-    onTrack: (stream) => { $("remoteVideo").srcObject = stream; },
-    onState: (st) => {
-      status("Verbindung: " + st);
-      if (st === "failed") status("Verbindung fehlgeschlagen (evtl. NAT/Firewall — kein TURN).");
-    },
-  });
-  camTrack = localStream.getVideoTracks()[0] || null;
-  return session;
+// --- remote tiles, one per peer --------------------------------------------------
+function setTile(peerId, stream) {
+  let tile = document.getElementById("tile-" + peerId);
+  if (!tile) {
+    tile = document.createElement("div");
+    tile.className = "tile";
+    tile.id = "tile-" + peerId;
+    const v = document.createElement("video");
+    v.autoplay = true; v.playsInline = true;
+    const label = document.createElement("span");
+    label.textContent = peerId === "host" ? "Host" : "Peer " + peerId;
+    tile.append(v, label);
+    $("videos").appendChild(tile);
+  }
+  tile.querySelector("video").srcObject = stream;
 }
+const removeTile = (peerId) => document.getElementById("tile-" + peerId)?.remove();
+
+function ensureMesh(isHost) {
+  if (!mesh) {
+    mesh = new MeshSession({
+      stream: localStream,
+      isHost,
+      onPeerStream: (id, s) => setTile(id, s),
+      onPeerLeave: (id) => removeTile(id),
+      onStatus: (m) => status(m),
+    });
+  }
+  return mesh;
+}
+
+const eachPeer = (fn) => { if (mesh) for (const s of mesh.peers.values()) fn(s); };
 
 // --- Step 1: media + device list -------------------------------------------------
 $("startCam").addEventListener("click", async () => {
   try {
     localStream = await getMedia({ video: true, audio: true });
     $("localVideo").srcObject = localStream;
+    camTrack = localStream.getVideoTracks()[0] || null;
     $("startCam").disabled = true;
     $("shareScreen").disabled = false;
     $("createInvite").disabled = false;
@@ -43,7 +65,7 @@ $("startCam").addEventListener("click", async () => {
     show("deviceRow", true);
     status(pendingOffer
       ? "Kamera läuft. Du wurdest eingeladen — jetzt „Beitreten & Antwort erzeugen“."
-      : "Kamera läuft. Lade jemanden über „Einladung erstellen“ ein.");
+      : "Kamera läuft. Lade Teilnehmer über „Einladung erstellen“ ein (eine Einladung pro Person).");
   } catch (err) {
     status("Kamera/Mikro-Zugriff fehlgeschlagen: " + err.message);
   }
@@ -72,7 +94,7 @@ async function switchDevices() {
       audio: { deviceId: { exact: $("micSelect").value } },
     });
     const v = next.getVideoTracks()[0], a = next.getAudioTracks()[0];
-    if (session) { await session.replaceVideo(v); await session.replaceAudio(a); }
+    for (const s of (mesh ? mesh.peers.values() : [])) { await s.replaceVideo(v); await s.replaceAudio(a); }
     localStream.getTracks().forEach((t) => t.stop());
     localStream = next; camTrack = v;
     $("localVideo").srcObject = next;
@@ -84,40 +106,46 @@ async function switchDevices() {
 $("camSelect").addEventListener("change", switchDevices);
 $("micSelect").addEventListener("change", switchDevices);
 
-// --- Host: create invite ---------------------------------------------------------
+// --- Host: create an invite for the next guest -----------------------------------
 $("createInvite").addEventListener("click", async () => {
-  if (session) { status("Es ist bereits eine Einladung offen."); return; }
+  if (bootstrapPending) { status("Es ist bereits eine Einladung offen — füge erst deren Antwort ein."); return; }
+  if (mesh && !mesh.isHost) { status("Du bist als Gast beigetreten."); return; }
   $("createInvite").disabled = true;
   try {
-    roomId = crypto.randomUUID(); setRoom();
-    newSession();
-    const offer = await session.createOffer();
+    if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
+    ensureMesh(true);
+    const offer = await mesh.createBootstrapOffer();
     $("inviteUrl").value = await buildCapabilityUrl("offer", roomId, offer);
     $("copyInvite").disabled = false; $("mailInvite").disabled = false;
-    status("Einladung erstellt. Schick den Link per E-Mail und füge unten die Antwort ein.");
+    bootstrapPending = true;
+    status("Einladung erstellt. Schick den Link und füge unten die Antwort ein.");
   } catch (err) {
-    session = null; $("createInvite").disabled = false;
+    $("createInvite").disabled = false;
     status("Einladung fehlgeschlagen: " + err.message);
   }
 });
 
-// --- Load an incoming invite or answer -------------------------------------------
+// --- Load an incoming invite (guest) or answer (host) ----------------------------
 $("loadIncoming").addEventListener("click", async () => {
   const text = $("incomingIn").value;
   if (!text.trim()) return;
   try {
     const payload = await parseIncoming(text);
     if (payload.kind === "offer") {
-      if (session) { status("Du hast schon eine eigene Einladung offen — du kannst nicht deiner eigenen beitreten."); return; }
+      if (mesh && mesh.isHost) { status("Du bist Host — du kannst nicht deiner eigenen Einladung beitreten."); return; }
       pendingOffer = payload.sdp; roomId = payload.room; setRoom();
       show("joinAnswer", localStream != null);
       status(localStream
         ? "Einladung geladen. Jetzt „Beitreten & Antwort erzeugen“."
         : "Einladung geladen. Starte zuerst Kamera + Mikro, dann beitreten.");
     } else {
-      if (!session) { status("Es gibt keine offene Einladung für diese Antwort."); return; }
-      await session.acceptAnswer(payload.sdp);
-      status("Antwort übernommen — Verbindung wird aufgebaut …");
+      if (!mesh || !mesh.isHost || !bootstrapPending) { status("Keine offene Einladung für diese Antwort."); return; }
+      await mesh.acceptBootstrapAnswer(payload.sdp);
+      bootstrapPending = false;
+      $("createInvite").disabled = false;
+      $("inviteUrl").value = ""; $("incomingIn").value = "";
+      $("copyInvite").disabled = true; $("mailInvite").disabled = true;
+      status("Teilnehmer verbunden. Lade weitere ein oder bleib einfach im Call — das Mesh verbindet sich selbst.");
     }
   } catch (err) {
     status("Konnte Eingabe nicht lesen: " + err.message);
@@ -126,18 +154,18 @@ $("loadIncoming").addEventListener("click", async () => {
 
 // --- Guest: join and produce an answer -------------------------------------------
 $("joinAnswer").addEventListener("click", async () => {
-  if (session || !pendingOffer) return;
+  if (mesh || !pendingOffer) return;
   $("joinAnswer").disabled = true;
   try {
-    newSession();
-    const answer = await session.createAnswer(pendingOffer);
+    ensureMesh(false);
+    const answer = await mesh.joinWithOffer(pendingOffer);
     $("answerUrl").value = await buildCapabilityUrl("answer", roomId, answer);
     show("answerLabel", true); show("answerUrl", true);
     show("copyAnswer", true); show("mailAnswer", true);
     show("joinAnswer", false);
-    status("Antwort erzeugt. Schick sie dem Host zurück.");
+    status("Antwort erzeugt. Schick sie dem Host zurück — danach verbindet sich das Mesh automatisch.");
   } catch (err) {
-    session = null; $("joinAnswer").disabled = false;
+    mesh = null; $("joinAnswer").disabled = false;
     status("Beitritt fehlgeschlagen: " + err.message);
   }
 });
@@ -153,12 +181,12 @@ $("mailAnswer").addEventListener("click", () => {
   location.href = mailtoLink("ultrathink.call — Antwort", "Meine Antwort auf deine Einladung:", $("answerUrl").value);
 });
 
-// --- Screen sharing --------------------------------------------------------------
+// --- Screen sharing (applies to every peer) --------------------------------------
 $("shareScreen").addEventListener("click", async () => {
   try {
     const display = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
     const screenTrack = display.getVideoTracks()[0];
-    if (session) await session.replaceVideo(screenTrack);
+    for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
     $("localVideo").srcObject = display;
     show("deviceRow", false);
     $("shareScreen").disabled = true; $("stopShare").disabled = false;
@@ -171,7 +199,7 @@ $("shareScreen").addEventListener("click", async () => {
 $("stopShare").addEventListener("click", restoreCamera);
 async function restoreCamera() {
   camTrack = localStream.getVideoTracks()[0] || camTrack;
-  if (session && camTrack) await session.replaceVideo(camTrack);
+  for (const s of (mesh ? mesh.peers.values() : [])) if (camTrack) await s.replaceVideo(camTrack);
   $("localVideo").srcObject = localStream;
   show("deviceRow", true);
   $("shareScreen").disabled = false; $("stopShare").disabled = true;
