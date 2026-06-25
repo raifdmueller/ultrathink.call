@@ -43,8 +43,3 @@ export function shareData(subject, intro, url) {
 export function canNativeShare() {
   return typeof navigator !== "undefined" && typeof navigator.share === "function";
 }
-
-export function inviteTokenInHash() {
-  const m = location.hash.match(/#invite=([A-Za-z0-9\-_]+)/);
-  return m ? m[1] : null;
-}

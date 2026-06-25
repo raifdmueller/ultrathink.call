@@ -227,17 +227,25 @@ $("blurToggle").addEventListener("click", async () => {
 });
 
 // --- The handshake: create an invite, ingest an invite/answer ---------------------
+// Returns true once an invite exists, false on refusal/failure — so callers only
+// commit UI transitions (hide start, arm the unload guard) on success.
 async function createInvite() {
-  if (bootstrapPending) { status("Es ist bereits eine Einladung offen — füge erst deren Antwort ein."); return; }
-  if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
-  ensureMesh(true);
-  const offer = await mesh.createBootstrapOffer();
-  setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
-  applyShareChannels("shareInvite", "mailInvite");
-  bootstrapPending = true;
-  $("answerIn").value = "";
-  show("stepInvite", true);
-  status("Einladung erstellt. Schick den Link, lass die Seite offen und füge die Antwort ein.");
+  if (bootstrapPending) { status("Es ist bereits eine Einladung offen — füge erst deren Antwort ein."); return false; }
+  try {
+    if (!roomId) { roomId = crypto.randomUUID(); setRoom(); }
+    ensureMesh(true);
+    const offer = await mesh.createBootstrapOffer();
+    setLink("inviteLink", await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS), INVITE_MSG.linkLabel);
+    applyShareChannels("shareInvite", "mailInvite");
+    bootstrapPending = true;
+    $("answerIn").value = "";
+    show("stepInvite", true);
+    status("Einladung erstellt. Schick den Link, lass die Seite offen und füge die Antwort ein.");
+    return true;
+  } catch (err) {
+    status("Einladung fehlgeschlagen: " + err.message);
+    return false;
+  }
 }
 
 async function ingestIncoming(text) {
@@ -268,15 +276,18 @@ function showGuestStart() {
   $("guestRoom").textContent = roomId ? "Raum: " + roomId : "";
 }
 
-// Host: one step — camera + first invite.
+// Host: one step — camera + first invite. Only commit the phase transition once
+// the invite actually exists, so a failed offer doesn't strand the start screen.
 $("openCall").addEventListener("click", async () => {
   $("openCall").disabled = true;
   if (!(await startMedia())) { $("openCall").disabled = false; return; }
-  show("stepStart", false);
-  show("inviteMore", true);
-  armUnloadGuard();
-  try { await createInvite(); }
-  catch (err) { status("Einladung fehlgeschlagen: " + err.message); }
+  if (await createInvite()) {
+    show("stepStart", false);
+    show("inviteMore", true);
+    armUnloadGuard();
+  } else {
+    $("openCall").disabled = false;
+  }
 });
 
 // Guest: one step — camera + answer.
@@ -300,9 +311,7 @@ $("join").addEventListener("click", async () => {
 
 $("pasteLoad").addEventListener("click", () => ingestIncoming($("pasteIn").value));
 $("answerLoad").addEventListener("click", () => ingestIncoming($("answerIn").value));
-$("inviteMore").addEventListener("click", async () => {
-  try { await createInvite(); } catch (err) { status("Einladung fehlgeschlagen: " + err.message); }
-});
+$("inviteMore").addEventListener("click", () => createInvite());
 $("leaveCall").addEventListener("click", () => { disarmUnloadGuard(); mesh?.close(); mesh = null; location.reload(); });
 
 // --- Distribution: native share / clipboard / mailto (#42) -----------------------
