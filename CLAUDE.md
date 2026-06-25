@@ -116,7 +116,7 @@ Quality assurance follows three layers:
 Documentation follows Docs-as-Code according to Ralf D. Müller:
 - AsciiDoc as format, PlantUML for inline diagrams, built by docToolchain
 - Version-controlled, peer-reviewed, and built automatically
-- Plain English according to Strunk & White (or Gutes Deutsch nach Wolf Schneider)
+- Plain English according to Strunk & White (artifacts are English-only; see Writing Style)
 - Projects following this contract include the `dtcw` wrapper and `docToolchainConfig.groovy` so PlantUML / AsciiDoc actually render.
 
 ## Socratic Code Theory Recovery
@@ -166,7 +166,9 @@ Don't announce or walk through the method you're using — let it shape what you
 
 ## Writing Style
 
-Writing follows Gutes Deutsch nach Wolf Schneider (or Plain English according to Strunk & White).
+All project artifacts — documentation, specs, architecture, code comments, and GitHub issues/PRs (title and body) — are written in **English**, regardless of the conversation language. Conversation with the user may be in German.
+
+Writing follows Plain English according to Strunk & White.
 
 Additionally:
 - Technical terms stay in English (LLM, Prompt, Token, Spec, etc.)
