@@ -1,0 +1,98 @@
+== Cross-cutting Concepts
+
+Five baseline concepts apply across the system, plus one for its central seam.
+Each concept back-references the ADR that decided it; security mitigations
+reference the threat IDs they close.
+
+=== Threat Model (STRIDE)
+
+Threats carry IDs (T-NNN) and feed both the security concept (8.2) and the risk
+register (Chapter 11). Decided context: ADR-1 (server-less P2P), ADR-2
+(capability-URL signaling).
+
+[cols="1,1,3,1",options="header"]
+|===
+| ID | STRIDE | Threat | Risk / closed by
+| T-001 | Spoofing | An uninvited party joins with a leaked/forwarded capability token (no auth). | R-3
+| T-002 | Tampering | A malicious signaling path or broker tampers with SDP/ICE (MITM at setup). | R-7
+| T-003 | Tampering | A compromised static host, CDN, or dependency alters the delivered client code. | R-10, R-11
+| T-004 | Repudiation | No accounts and no audit trail (8.4, by privacy choice G-9) → no attribution of who forwarded a token or disrupted a session. *Accepted residual.* | R-3
+| T-005a | Information Disclosure | The STUN operator's jurisdiction sees connection metadata. | closed by M-5
+| T-005b | Information Disclosure | STUN and the remote peer learn each participant's public IP (inherent to P2P). | R-6 (open)
+| T-006 | Information Disclosure | Whole-screen sharing leaks other windows/notifications. | R-8
+| T-007 | Information Disclosure | The capability token leaks via email storage, clipboard residency, or browser history. | R-3
+| T-008 | Denial of Service | An oversized or gzip-bomb token exhausts client memory on decode. | closed by M-3
+| T-009 | Denial of Service | A gate-crasher disrupts a session; there is no host admit/kick/mute. | R-9
+| T-010 | Elevation of Privilege | A crafted token tries to inject script/markup into the DOM. | closed by M-2, M-3
+| T-011 | Information Disclosure | The fragment token leaks via the HTTP `Referer` header or `window.opener` when a link is followed. | closed by M-7
+|===
+
+Two further threats are named but deferred to the R2/R3 designs: a malicious
+*remote peer* sending abusive SDP/ICE candidates beyond the DTLS-fingerprint
+check (R2 broker design — VR coverage extends there), and broker-side room-id
+*claim collision/squatting* at R2 (broker adapter design).
+
+=== Security
+
+Decided in ADR-2 and ADR-3. Each mitigation names the threats it closes.
+
+[cols="1,3,1",options="header"]
+|===
+| Mitigation | Mechanism | Closes
+| M-1 Encrypted media | DTLS-SRTP only, no plaintext fallback; a remote SDP without an `a=fingerprint` is rejected (VR-9). | T-002
+| M-2 Page integrity | Single self-contained file; Content-Security-Policy blocks external scripts and `object/base/frame`. Note: the inline script needs `script-src 'unsafe-inline'`, so against DOM injection (T-010) the real guard is M-3; CSP raises the bar against external-script and framing injection. Hash/nonce CSP, a real HTTP header, SRI, and Trusted Types are deferred (see Deferred). | T-003 (partial), T-010 (with M-3)
+| M-3 Input validation | Decode-time rules VR-1..6,8,9 + size caps; the token is parsed as data only, never evaluated or inserted as HTML (BR-8). | T-008, T-010
+| M-4 Capability secrecy | CSPRNG room id (SM-6); the token is the bearer secret. *Advisory only* — no technical access enforcement at R1; the UI warns to share carefully. Expiry/single-use and host-admit are deferred. | T-001, T-007 (advisory)
+| M-5 Sovereign endpoints | The only runtime media-path endpoint is a non-US STUN (TC-2). Closes jurisdiction only, not IP disclosure (T-005b stays open). | T-005a
+| M-6 Oversharing guard | Screen share prefers a single window and warns before sharing. | T-006
+| M-7 Referrer hardening | `<meta name="referrer" content="no-referrer">` so the fragment token never leaks via `Referer`; external links (when added) carry `rel="noopener noreferrer"`. | T-011
+| Deferred | TURN relay (hide IP, T-005b), host admit/moderation (T-001/T-009), single-use/expiring tokens (T-007), SRI + Trusted Types + hash/nonce CSP (T-003/T-010 — required before the R3 WASM blur model ships). | issues #4, #7; threat-model backlog
+|===
+
+NOTE: M-2 covers R0–R2 only. At R3 the background-blur WASM model is a fetched
+artifact: the self-contained-file premise no longer holds, and SRI + a pinned
+hash become a release gate before that model ships (reopens T-003).
+
+=== Test
+
+Decided alongside ADR-5 (the ports seam makes the codec unit-testable). The
+testing pyramid, broad base first:
+
+* *Unit* — the token codec (`encodePayload`/`decodePayload`) and validation rules VR-1..6,8,9; pure functions, the extraction target of issue #7. Traces to VR-*, BR-7.
+* *Integration* — the signaling handshake through the port adapter (offer→answer→connected). Traces to UC-1, UC-2, SYS-UC-1..3.
+* *End-to-end* — two browser contexts complete a call and a screen share. Traces to UC-1..UC-4, SM-5.
+
+Current state (honest): R0–R1 are tracer-bullet slices with no automated tests
+yet; the codec extraction (issue #7) is the prerequisite that unblocks the unit
+layer. Each future test references its UC/BR/VR id for traceability.
+
+=== Observability
+
+Decided by ADR-1: a server-less app with zero egress (G-9) cannot send telemetry,
+and by privacy choice must not. Observability is therefore local and user-facing:
+
+* *Logs* — the `status()` line surfaces every state change and error to the user; `connectionstatechange` is the connection signal.
+* *Metrics/traces* — only via the browser's own `getStats()` and devtools; nothing is collected remotely.
+* *Audit* — none server-side by design; there is no account or server log to audit (the accepted residual behind T-004).
+
+This is a deliberate trade from ADR-1: the zero-egress guarantee (M-5, G-9) costs
+central observability (tracked as R-13). Debugging relies on the local console
+and `RTCPeerConnection` stats.
+
+=== Error Handling
+
+Decided by ADR-1/ADR-2: with no backend, recovery is local and bounded.
+
+* *Bounded waits* — ICE gathering resolves on a timeout instead of hanging (EARS-4); a stalled gather still ships candidates.
+* *Fail-closed media* — a remote description without DTLS is rejected before `setRemoteDescription` (M-1); future blur fails closed (no raw frame) on model-load failure.
+* *Graceful fallback* — device-switch failure keeps the previous track; an invalid token yields a message and no state change (BR-7).
+* *Reported failure* — `connectionState = failed` is surfaced with a NAT/TURN hint rather than swallowed (R-12).
+* *Not yet* — automatic reconnect and peer teardown are tracked debt (Chapter 11); R0 already flagged "no reconnect".
+
+=== Modularity and Ports (cross-cutting)
+
+Decided in ADR-5. Every external dependency sits behind a port so it is
+swappable (QG-4): the *Signaling Transport* (BB-4, manual adapter now, broker
+adapter at R2), the ICE/STUN configuration, and — at R3 — the video-processing
+pipeline for background blur. Adapters form an anti-corruption layer between the
+app's domain (host, guest, room, invite, answer) and the external protocols.

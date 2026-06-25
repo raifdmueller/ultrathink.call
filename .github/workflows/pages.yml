@@ -1,5 +1,6 @@
-# GitHub Pages: deploy the static site from the repo root.
-# WebRTC braucht einen sicheren Kontext — Pages liefert HTTPS, also passt das.
+# GitHub Pages: deploy the app at / and the rendered arc42 architecture at /architecture/.
+# The architecture is built with docToolchain `generateSite` (the same local flow:
+# Java 17 + graphviz + dtcw). WebRTC needs a secure context — Pages serves HTTPS.
 name: Deploy to GitHub Pages
 
 on:
@@ -12,24 +13,58 @@ permissions:
   pages: write
   id-token: write
 
-# Nur ein Pages-Deploy gleichzeitig; laufende nicht abbrechen.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17 (docToolchain requires 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Graphviz (PlantUML/C4 diagrams)
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: Cache docToolchain install
+        uses: actions/cache@v4
+        with:
+          path: ~/.doctoolchain
+          key: doctoolchain-3.5.0
+
+      - name: Render arc42 site (docToolchain generateSite)
+        env:
+          DTC_HEADLESS: "true"
+        run: |
+          chmod +x dtcw
+          ./dtcw local install doctoolchain
+          ./dtcw local generateSite
+
+      - name: Assemble Pages artifact (app at /, architecture at /architecture/)
+        run: |
+          mkdir -p public/architecture
+          cp index.html public/
+          cp -r build/microsite/output/. public/architecture/
+          touch public/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # index.html liegt im Root, kein Build noetig.
-          path: .
       - id: deployment
         uses: actions/deploy-pages@v4

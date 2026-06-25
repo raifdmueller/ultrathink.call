@@ -1,0 +1,24 @@
+== Glossary
+
+Domain and technical terms use the same words in code, spec, and architecture
+(Ubiquitous Language).
+
+[cols="1,3",options="header"]
+|===
+| Term | Definition
+| Host | The participant who opens a call and creates the invite (PRD persona P-1/P-3).
+| Guest | The participant who opens an invite and joins (PRD persona P-2/P-3).
+| Room | A logical call, identified by a CSPRNG UUIDv4 room id (BR-2).
+| Capability-URL | A link whose URL fragment carries the signaling token; possessing it grants access (the bearer secret).
+| Invite / Answer token | The encoded WebRTC offer / answer (`#invite=` / `#answer=`); see interface contract IC-1.
+| Signaling | The exchange of SDP offer/answer to establish a peer connection. Here it is server-less (capability-URL + `mailto:`).
+| Mesh | A topology where every peer connects directly to every other peer; uploads `N-1` streams per peer.
+| SFU | Selective Forwarding Unit — a media server that forwards streams; rejected because it is infrastructure (ADR-1).
+| STUN | A protocol/server that tells a peer its public reflexive address for NAT traversal. Here: non-US (Nextcloud, DE).
+| TURN | A relay that forwards media when direct P2P fails; not used at R0–R1 (TC-7), deferred (issue #4).
+| DTLS-SRTP | The mandatory WebRTC encryption for media/data; the system rejects any SDP without a DTLS fingerprint (M-1, VR-9).
+| ICE | Interactive Connectivity Establishment — candidate gathering for the peer connection; here non-trickle, timeout-bounded.
+| Port / Adapter | A transport-agnostic interface (port) with swappable implementations (adapters); the signaling seam (BB-4, ADR-5).
+| Sovereignty | Independence from US-jurisdiction components in the runtime path (G-1).
+| Capability secret | The whole token (R1) or the room UUID (R2 broker) whose possession admits a peer.
+|===

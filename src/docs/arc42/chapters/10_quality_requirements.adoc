@@ -1,0 +1,41 @@
+== Quality Requirements
+
+Chapter 1.2 names the top goals that drive decisions; this chapter covers all
+eight ISO/IEC 25010 characteristics. Each entry is marked as concretising a
+Chapter 1.2 goal (QG-*) or as a derived requirement. Scenarios use the six-part
+form (Source, Stimulus, Artifact, Environment, Response, Response Measure) with a
+literal measure, so each is testable.
+
+=== Quality tree
+
+[cols="1,2,1",options="header"]
+|===
+| ISO 25010 characteristic | In this system | Concretises / derived
+| Security | Sovereignty, encryption, input validation | QG-1 (top goal)
+| Reliability | Degrade under load, not drop; bounded waits | QG-3 (top goal)
+| Maintainability | Ports + adapters, swappable dependencies | QG-4 (top goal)
+| Functional Suitability | 2→4 call, screen share, device selection | derived
+| Usability | Join < 60 s, no install, no login | derived (supports QG-2)
+| Performance Efficiency | Token fits a link; client-side codec | derived
+| Compatibility | Modern-browser WebRTC, no native app | derived
+| Portability | Static page runs on any static host | derived (supports QG-2)
+|===
+
+NOTE: Operability/zero-ops (QG-2) is realized structurally (no server exists,
+Chapter 7) rather than as a runtime scenario; QS-4 records its measure.
+
+=== Quality scenarios
+
+[cols="1,4,1",options="header"]
+|===
+| ID | Six-part scenario | Goal
+| QS-1 | *Source* auditor; *Stimulus* inspects every runtime endpoint; *Artifact* deployed app; *Environment* a live call; *Response* lists STUN/host/CDN/DNS operators; *Response Measure* **0 endpoints under US jurisdiction** (SM-2). Met in the media path today; the static *host* is the open exception (R-11/ADR-6). | QG-1
+| QS-2 | *Source* attacker; *Stimulus* supplies an SDP with no DTLS fingerprint; *Artifact* token validation; *Environment* normal; *Response* reject before `setRemoteDescription`; *Response Measure* **100 % of non-DTLS descriptions rejected** (SM-7, VR-9). | QG-1
+| QS-3 | *Source* the OS; *Stimulus* CPU saturated ≥ 90 % for ≥ 120 s; *Artifact* outgoing video; *Environment* a running call; *Response* step resolution down, keep the stream; *Response Measure* **stream stays connected at ≥ 10 fps, no dropout** (SM-3). | QG-3
+| QS-4 | *Source* operator; *Stimulus* ships a change; *Artifact* deployment; *Environment* normal release; *Response* `git push` triggers the Pages build; *Response Measure* **0 servers to operate or patch** (QG-2). | QG-2
+| QS-5 | *Source* participant; *Stimulus* enables background blur; *Artifact* outgoing video; *Environment* a training; *Response* obscure the background before encoding; *Response Measure* **background unidentifiable in ≥ 9/10 sampled frames at 720p** (SM-4). | QG-5
+| QS-6 | *Source* invitee; *Stimulus* opens a shared link; *Artifact* the app; *Environment* first use; *Response* join the call; *Response Measure* **< 60 s, no install, no login** (SM-5). | derived
+| QS-7 | *Source* developer; *Stimulus* replaces the signaling adapter with the broker; *Artifact* BB-4; *Environment* R2; *Response* swap the adapter; *Response Measure* **change confined to BB-4; BB-3 and BB-5 untouched** (G-6). | QG-4
+| QS-8 | *Source* attacker; *Stimulus* sends a gzip-bomb token; *Artifact* the codec; *Environment* normal; *Response* abort decompression; *Response Measure* **decode aborts once output exceeds 512 KB** (VR-8). | derived (QG-1)
+| QS-9 | *Source* host; *Stimulus* creates an invite for a typical call; *Artifact* the token; *Environment* normal; *Response* encode offer into a link; *Response Measure* **token under ~8 KB after gzip, fits a `mailto:` body** (D-2). | derived
+|===

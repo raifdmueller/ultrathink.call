@@ -1,0 +1,48 @@
+== Introduction and Goals
+
+ultrathink.call is a sovereign, server-less video call. Four peers meet in a
+browser mesh with screen sharing; there is no backend to operate and no login to
+build. This document records the architecture; the requirements live in
+`src/docs/prd.adoc` and the testable behaviour in `src/docs/spec.adoc`.
+
+=== Requirements Overview
+
+The driving goal is independence from US video providers (Zoom, Teams) for a
+European trainer who runs weekly peer rounds and trainings, without running
+infrastructure or building authentication. See PRD goals G-1..G-9. The system
+grows in thin slices: R0 (done, 2-peer copy-paste skeleton), R1 (done, device
+selection + capability-URL signaling), R2 (4-peer mesh + broker), R3 (background
+blur), R4 (adaptive bitrate), R5 (training ~20).
+
+=== Quality Goals
+
+Chapter 1.2 lists only the top quality goals that drive architecture decisions;
+the full quality tree is in Chapter 10. Each goal names its approach in Chapter 4.
+
+[cols="1,2,3,2",options="header"]
+|===
+| # | Quality goal (ISO 25010) | Concrete meaning | Approach (Ch. 4)
+| QG-1 | Security / Confidentiality | No US-jurisdiction component in the runtime path; media always DTLS-SRTP encrypted; no participant data on any server. | S-1, S-2, S-5
+| QG-2 | Operability (zero-ops) | The whole system is a static page — nothing to run, patch, or scale. | S-1, S-3
+| QG-3 | Reliability under load | Video degrades (resolution/bitrate) instead of dropping under CPU/bandwidth pressure. | S-4
+| QG-4 | Modifiability | Signaling, ICE, and video processing sit behind ports and are swappable. | S-5
+| QG-5 | Privacy | Participants can hide their surroundings (client-side background blur). | S-6
+|===
+
+The goals are ranked *QG-1 > QG-2 > QG-3 > QG-4 > QG-5* — sovereignty shapes
+every decision. The ranking is the tie-breaker in ADR-3 and ADR-6 and the
+decision criterion for the still-open topology choice (ADR-4).
+
+CAUTION: The current delivery host (GitHub Pages) is US-jurisdiction — an open
+gap against QG-1, tracked as risk R-11 and decision ADR-6.
+
+=== Stakeholders
+
+[cols="1,1,2",options="header"]
+|===
+| Role | Persona | Expectation
+| Trainer / Host | P-1 | Sovereign, low-effort call for trainings and the weekly round.
+| Participant | P-2 | Join without install or login; protect surroundings on camera.
+| Peer | P-3 | Reliable, equal screen-share and audio/video in the 4-person round.
+| Architect / Developer | — | A modular design that grows slice by slice without rewrites.
+|===

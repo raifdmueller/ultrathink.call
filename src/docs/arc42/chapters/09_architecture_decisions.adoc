@@ -1,0 +1,149 @@
+== Architecture Decisions
+
+ADRs follow Nygard with a 3-point Pugh matrix (`-1`/`0`/`+1` against a datum
+option). Consequences name the Chapter 11 risks each decision creates.
+
+=== ADR index
+
+[cols="1,3,1",options="header"]
+|===
+| ADR | Title | Status
+| ADR-1 | Server-less peer-to-peer, no own infrastructure | Accepted
+| ADR-2 | Capability-URL signaling (SDP-in-link + `mailto:`) | Accepted
+| ADR-3 | Sovereign (non-US) STUN; no Google | Accepted
+| ADR-4 | Topology for the ~20-participant training case | Proposed (open — issue #3)
+| ADR-5 | Ports and adapters for external dependencies | Accepted
+| ADR-6 | Static host: GitHub Pages as interim, not sovereign | Accepted (inferred, interim)
+|===
+
+=== ADR-1 Server-less peer-to-peer, no own infrastructure
+
+*Status*: Accepted. *Context*: independence from US providers without running or
+paying for infrastructure (G-1, G-2). *Decision*: a static page plus browser
+WebRTC; peers connect directly, no media server.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | SaaS (Zoom) — datum | Self-hosted SFU | Server-less P2P
+| Sovereignty (G-1) | 0 | +1 | +1
+| Zero-ops (G-2) | 0 | -1 | +1
+| Scales past ~6 peers | 0 | +1 | -1
+| Cost | 0 | -1 | +1
+| *Sum* | *0* | *0* | *+2*
+|===
+
+*Consequences*: chosen for sovereignty + zero-ops; creates *R-1* (mesh cannot
+reach ~20 — the central tension) and inherits *R-6* (IP exposure in P2P).
+
+=== ADR-2 Capability-URL signaling (SDP-in-link + `mailto:`)
+
+*Status*: Accepted. *Context*: signaling without a backend or login (G-2, G-3).
+*Decision*: carry the SDP in the URL fragment; the token is the bearer secret;
+distribute via the host's own `mailto:`. The automatic broker is a later adapter
+(R2), not a reason to add infrastructure now.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Email magic-link service — datum | Public broker (Trystero) | Capability-URL + mailto
+| Zero backend (G-2) | 0 | +1 | +1
+| No login (G-3) | 0 | 0 | +1
+| Usability at 2 peers | 0 | +1 | 0
+| Sovereignty (G-1) | 0 | -1 | +1
+| *Sum* | *0* | *+1* | *+3*
+|===
+
+*Consequences*: chosen for full sovereignty and zero backend; creates *R-3*
+(token leak/replay — no revocation) and is verbose at scale, which motivates the
+R2 broker adapter (issue #7). DTLS-fingerprint exchange over the capability
+channel partially mitigates *R-7*.
+
+=== ADR-3 Sovereign (non-US) STUN; no Google
+
+*Status*: Accepted. *Context*: G-1 forbids any US-jurisdiction runtime component,
+"not even STUN". *Decision*: use a non-US STUN (Nextcloud, DE) as the interim
+endpoint; the vetted set with fallbacks is D-9/R2.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Google STUN — datum | No STUN (host candidates only) | Sovereign STUN (DE)
+| Sovereignty (G-1) | 0 | +1 | +1
+| Works across NAT | 0 | -1 | 0
+| Reliability | 0 | -1 | -1
+| *Sum* | *0* | *-1* | *0*
+|===
+
+The chosen option ties the Google datum on raw count: a single interim DE
+endpoint is genuinely less reliable than Google's anycast (the R-2 cost, now
+visible in the matrix). The tie is broken by *QG-1 (sovereignty)*, the
+top-ranked quality goal (Chapter 1.2).
+
+*Consequences*: removes the G-1 violation in the media path; creates *R-2*
+(single interim endpoint availability) until D-9 adds vetted fallbacks.
+
+=== ADR-4 Topology for the ~20-participant training case
+
+*Status*: Proposed (open). *Context*: a full mesh uploads `N-1` streams per peer
+and cannot reach ~20 on home uplinks; an SFU is infrastructure (conflicts with
+G-2). *Decision*: deferred — recorded as open, tracked in issue #3. Pugh cells
+that need team judgment are marked `?` rather than guessed.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Full mesh — datum | Asymmetric broadcast | Self-hosted EU SFU
+| Sovereignty (G-1) | 0 | 0 | 0
+| Zero-ops (G-2) | 0 | 0 | -1
+| Reaches ~20 | 0 | +1 | +1
+| UX symmetry | 0 | -1 | ?
+| *Sum* | *0* | *0* | *?*
+|===
+
+*Consequences*: until decided, R5 (training) is blocked; creates/keeps *R-1* open.
+The decision will add or accept a risk explicitly when made.
+
+=== ADR-5 Ports and adapters for external dependencies
+
+*Status*: Accepted. *Context*: avoid new lock-in; allow swapping signaling, ICE,
+and video processing (G-6). *Decision*: each external dependency sits behind a
+port; adapters form an anti-corruption layer.
+
+[cols="2,1,1",options="header"]
+|===
+| Criterion | Inline in handlers — datum | Ports + adapters
+| Swappable signaling (G-6) | 0 | +1
+| Unit-testable codec | 0 | +1
+| Slice speed at R1 | 0 | -1
+| *Sum* | *0* | *+1*
+|===
+
+*Consequences*: chosen for modifiability and testability; the seam is specified
+now but the extraction is deliberately deferred to R2's Mikado first step
+(*tech-debt*, issue #7) to avoid a speculative abstraction (YAGNI). Creates no
+new tracked risk; the deferred extraction is tracked as TD-1 / issue #7.
+
+=== ADR-6 Static host: GitHub Pages as interim, not sovereign
+
+*Status*: Accepted (inferred, interim). *Context*: the static host delivers the
+executable client code and is therefore a runtime endpoint that G-1/TC-2 require
+to be non-US. The project currently deploys to *GitHub Pages* (Microsoft, US),
+which contradicts that goal — surfaced by the ATAM review. *Decision*: accept
+GitHub Pages as an explicit interim while the app is a tracer, and treat the
+move to a sovereign EU static host as required before any sovereignty claim
+(SM-2) is presented as met. The end decision (which host) is the product owner's.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | GitHub Pages — datum | EU sovereign Pages (Codeberg / GitLab-EU) | Self-hosted EU
+| Sovereignty (G-1) | 0 | +1 | +1
+| Zero-ops (G-2) | 0 | 0 | -1
+| Migration effort | 0 | -1 | -1
+| *Sum* | *0* | *0* | *-1*
+|===
+
+The Pugh tie (datum vs. EU Pages) is again broken by QG-1: EU Pages wins on the
+top-ranked goal at no zero-ops cost. The cell that needs owner input — the exact
+host — is left to the decision in issue (host migration).
+
+*Consequences*: until migrated, the deployed app violates G-1; recorded as
+*R-11* (high) and tracked as an `adr-needed` issue. Development and source on
+GitHub are unaffected (not a runtime endpoint); only the *delivery* host is in
+scope.

@@ -1,0 +1,35 @@
+== Architecture Constraints
+
+The constraints below are hard boundaries the architecture must respect; most
+derive directly from PRD goals and are not negotiable design choices.
+
+=== Technical constraints
+
+[cols="1,3,1",options="header"]
+|===
+| ID | Constraint | Source
+| TC-1 | No own backend or server-side runtime; the system is delivered as a static page. | PRD G-2
+| TC-2 | No US-jurisdiction component in the runtime path (STUN, host, CDN, DNS, broker). | PRD G-1
+| TC-3 | No authentication/login and no user accounts. | PRD G-3
+| TC-4 | Browser-only; standard WebRTC, no native app and no plugins. | PRD R-5
+| TC-5 | Media is DTLS-SRTP with no plaintext fallback. | PRD G-8
+| TC-6 | No participant data is persisted or sent to any server. | PRD G-9
+| TC-7 | No TURN relay at R0–R1 (accepted NAT limitation). | PRD R-1 area
+|===
+
+=== Organizational and process constraints
+
+[cols="1,3",options="header"]
+|===
+| ID | Constraint
+| OC-1 | Docs-as-Code: AsciiDoc + PlantUML, built by docToolchain, version-controlled and peer-reviewed.
+| OC-2 | All project artifacts (docs, specs, architecture, code comments, issues/PRs) are written in English.
+| OC-3 | Every deliverable passes a Review Gate (context-less reviews + drift check) before it is merged.
+| OC-4 | The system grows as thin vertical slices; the first increment is a walking skeleton.
+|===
+
+=== Conventions
+
+* Diagrams are PlantUML, not Mermaid; building blocks use the C4-PlantUML stdlib (`!include <C4/...>`).
+* Decisions are ADRs (Nygard) with a 3-point Pugh matrix; see Chapter 9.
+* Identifiers are stable and cross-referenced: G-* (goals), D-* (deliverables), SM-* (criteria), R-* (risks), T-* (threats), ADR-*, QG-* (quality goals).

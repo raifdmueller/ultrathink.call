@@ -1,0 +1,78 @@
+== Runtime View
+
+Two scenarios show the blocks in motion: the happy path (host invites, guest
+joins) and an error/recovery path (an invalid token is rejected and a failed
+connection is reported). Together they exercise every Chapter 5 building block.
+
+=== Scenario 1 — Host invites, guest joins (happy path)
+
+[plantuml,rt-connect,svg]
+----
+@startuml
+actor Host
+actor Guest
+participant "UI Shell\n(BB-1)" as UI
+participant "Media Mgr\n(BB-2)" as M
+participant "Peer Conn\n(BB-3)" as PC
+participant "Signaling\n(BB-4)" as S
+participant "Codec\n(BB-5)" as C
+participant "Validation\n(BB-6)" as V
+
+Host -> UI : start camera/mic
+UI -> M : getUserMedia + list devices
+Host -> UI : create invite
+UI -> S : createInvite()
+S -> PC : createOffer + setLocalDescription
+PC -> PC : gather ICE (timeout)
+S -> C : encodePayload(offer)
+C --> S : #invite= token
+S --> UI : capability-URL + mailto draft
+Host ->> Guest : send link (out-of-band)
+Guest -> UI : open link
+UI -> C : decode
+C -> V : validate VR-1..6,8,9
+V --> UI : valid offer
+Guest -> UI : start camera/mic + join
+UI -> S : joinAnswer()
+S -> PC : setRemote(offer), createAnswer
+S -> C : encodePayload(answer)
+C --> Guest : #answer= token
+Guest ->> Host : return answer
+Host -> UI : load answer
+UI -> V : validate
+S -> PC : setRemote(answer)
+PC -> PC : DTLS-SRTP handshake
+PC --> UI : connected, remote media
+@enduml
+----
+
+=== Scenario 2 — Invalid token and failed connection (error / recovery)
+
+[plantuml,rt-error,svg]
+----
+@startuml
+actor Guest
+participant "UI Shell\n(BB-1)" as UI
+participant "Codec\n(BB-5)" as C
+participant "Validation\n(BB-6)" as V
+participant "Peer Conn\n(BB-3)" as PC
+
+== Invalid token rejected ==
+Guest -> UI : paste tampered/oversized token
+UI -> C : decode
+C -> V : check size, gzip, shape, fingerprint
+V --> UI : reject (VR-1/8/9 fail)
+UI --> Guest : error message, no state change
+
+== Connection cannot traverse NAT ==
+Guest -> UI : valid token, join
+UI -> PC : negotiate (no TURN at R1)
+PC -> PC : ICE fails behind symmetric NAT
+PC --> UI : connectionState = failed
+UI --> Guest : "failed (NAT/firewall — no TURN)"
+@enduml
+----
+
+The recovery for the NAT case is explicit and bounded: the System reports the
+failed state rather than hanging (EARS-4 timeout, R-1/R-6). A TURN relay is the
+deferred mitigation (issue #4).
