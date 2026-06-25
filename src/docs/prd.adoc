@@ -1,0 +1,231 @@
+= Product Requirements Document — ultrathink.call
+:author: Ralf D. Müller
+:revdate: 2026-06-25
+:revnumber: 0.1 (Draft)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+[abstract]
+Dieses PRD beschreibt das _Warum_ und das _Was_ von ultrathink.call: ein
+selbstbestimmter Videocall ohne Abhängigkeit von US-Anbietern, ohne eigene
+Infrastruktur und ohne Login. Es legt Ziele, Personas, Erfolgskriterien und
+Scope fest und benennt die zentrale Spannung, die die Architektur später
+auflösen muss. Das _Wie_ steht in der Spec und der arc42-Architektur.
+
+== Problem
+
+Trainer und Coaches in Europa hängen an US-Videodiensten wie Zoom. Wer davon
+unabhängig werden will, findet bei den naheliegenden Alternativen heute Lücken:
+
+* *alfaview* drosselte unter CPU-Last (Hitze) nicht die Bitrate, sondern ließ
+  das Bild des Vortragenden komplett ausfallen. Ausfall statt Degradation ist
+  im Training inakzeptabel.
+* *Jitsi Meet* wirkt im Betrieb hakelig, und der virtuelle Hintergrund ist zu
+  schwach. Gerade im Training muss die Privatsphäre der Teilnehmer — ihr
+  Wohnumfeld im Bild — geschützt sein.
+
+Der Trainer hat WebRTC-Grundwissen, aber wenig Erfahrung, und will keine
+Server betreiben und kein Login bauen. Der Walking Skeleton hat bereits
+bewiesen, dass ein einfacher P2P-Call ohne Server in einer statischen Seite
+machbar ist. Daraus soll ein Produkt wachsen — in dünnen Schritten.
+
+== Ziele und Nicht-Ziele
+
+=== Ziele
+
+[cols="1,4",options="header"]
+|===
+| ID | Ziel
+| G-1 | *Digitale Souveränität.* Kein Laufzeit-Baustein hängt von einem
+        US-Unternehmen ab — auch nicht STUN oder Signaling.
+| G-2 | *Keine eigene Infrastruktur.* Kein Backend, keine Server zum Betreiben
+        oder Patchen. Auslieferung als statische Seite.
+| G-3 | *Kein Login.* Keine Accounts, keine Authentifizierung zu bauen oder zu
+        pflegen.
+| G-4 | *Stabil unter Last.* Video degradiert kontrolliert (Auflösung/Bitrate),
+        statt auszufallen — der alfaview-Fehler darf sich nicht wiederholen.
+| G-5 | *Privatsphäre der Teilnehmer.* Client-seitiger Hintergrund-Blur bzw.
+        -Ersatz in guter Qualität.
+| G-6 | *Modularität.* Signaling, STUN/ICE und Video-Verarbeitung sind hinter
+        Ports gekapselt und austauschbar — Schutz vor neuem Lock-in.
+| G-7 | *Inkrementelles Wachstum.* Dünne Slices: Start bei 2, dann 4, Vision bis
+        ~20 für Trainings.
+|===
+
+=== Nicht-Ziele (vorerst)
+
+* Account-/Rechtesystem, föderierte Identitäten.
+* Cloud-Aufzeichnung, serverseitige Speicherung.
+* Native Mobile-Apps.
+* Mehr als ~20 Teilnehmer; Interop mit SIP/Zoom/Teams.
+* Eine von uns betriebene SFU (siehe Spannung R-1).
+
+== Personas
+
+[cols="1,1,3",options="header"]
+|===
+| ID | Persona | Kurzbeschreibung
+| P-1 | Trainer / Host | Gibt Trainings, leitet die wöchentliche Runde. Solides
+        Tech-Wissen, geringe Lust auf Betrieb. Will Kontrolle und Souveränität.
+| P-2 | Trainings-Teilnehmer | Bis ~20 Personen, kommen zum Lernen. Wollen
+        minimalen Aufwand und ihre Umgebung im Bild geschützt wissen.
+| P-3 | Peer (Austausch-Runde) | Eine:r von 4 Stammleuten. Symmetrische Rolle —
+        alle reden, sehen, teilen gleichberechtigt.
+|===
+
+== Impact Map
+
+Verbindet das Business-Ziel mit Akteuren, gewünschten Verhaltensänderungen
+(Impacts) und konkreten Deliverables — damit gebaut wird, was das Ziel bewegt.
+
+[plantuml,impact-map,svg]
+----
+@startmindmap
+* Unabhängig von\nUS-Videodiensten\n(Souveränität)
+** Trainer/Host (P-1)
+*** hält Runde + Training\nohne Zoom
+**** D1: 2→4 Mesh-Call
+**** D2: Capability-URL-Beitritt
+**** D5: Trainings-Modus (~20)
+*** behält Kontrolle\nüber Stack
+**** D6: modulare,\naustauschbare Adapter
+** Teilnehmer (P-2)
+*** tritt ohne Login\nund Install bei
+**** D2: Capability-URL-Beitritt
+*** schützt seine\nPrivatsphäre
+**** D4: Hintergrund-Blur
+** Peer (P-3)
+*** teilt Screen\nzuverlässig
+**** D3: Screensharing
+*** wird nicht\nabgehängt
+**** D7: adaptive Bitrate
+@endmindmap
+----
+
+== User Story Map
+
+Das Rückgrat ist die Nutzerreise; darunter liegen die Slices, jede ein
+lauffähiges Inkrement durch alle Schichten.
+
+.Backbone (Aktivitäten in zeitlicher Reihenfolge)
+[cols="1,1,1,1,1,1",options="header"]
+|===
+| Raum betreten | Gesehen/gehört werden | Andere sehen/hören | Screen teilen | Privatsphäre wahren | Stabil bleiben
+| Raum-Link öffnen | Kamera/Mikro wählen | Remote-Tiles | Bildschirm freigeben | Hintergrund blurren | Bei Last drosseln
+|===
+
+.Releases (vertikale Slices)
+[cols="1,2,3",options="header"]
+|===
+| Release | Inhalt | Status
+| R0 | Walking Skeleton: 2 Personen, Copy-Paste-Signaling, Screensharing | *fertig* (PR #1)
+| R1 | Kamera-/Mikrofon-Auswahl; Beitritt per Capability-URL (statt Copy-Paste), 2 Personen | nächster Slice
+| R2 | 4er-Mesh; automatisches Signaling über souveränen (nicht-US) Broker; souveräner STUN | geplant
+| R3 | Hintergrund-Blur/-Ersatz, client-seitig | geplant
+| R4 | Adaptive Bitrate/Auflösung unter CPU-/Bandbreiten-Druck | geplant
+| R5 | Trainings-Modus ~20 (asymmetrische Topologie) | Vision, ADR-pflichtig
+|===
+
+== Erfolgskriterien
+
+Messbar, nicht als Adjektiv formuliert.
+
+[cols="1,4",options="header"]
+|===
+| ID | Kriterium
+| SM-1 | Die wöchentliche 4er-Runde läuft 4 Wochen in Folge vollständig auf
+         ultrathink.call, ohne Rückfall auf Zoom.
+| SM-2 | Eine Prüfung aller Laufzeit-Endpunkte (STUN, Signaling-Broker) zeigt
+         kein US-Unternehmen im Pfad.
+| SM-3 | Unter CPU-Sättigung sinkt die Sender-Auflösung, der Stream bleibt
+         aber bestehen — der alfaview-Ausfall reproduziert nicht.
+| SM-4 | Ein Teilnehmer aktiviert Hintergrund-Blur; das Umfeld ist im Bild
+         nicht mehr erkennbar.
+| SM-5 | Beitritt in < 60 s durch Öffnen eines geteilten Links — ohne Install,
+         ohne Login.
+|===
+
+== Scope und Priorisierung (MoSCoW)
+
+[cols="1,4",options="header"]
+|===
+| Stufe | Umfang
+| *Must* | 2→4 Mesh, Kamera-/Mikro-Auswahl, Screensharing, Beitritt per
+           Capability-URL, souveräner (nicht-US) STUN.
+| *Should* | Hintergrund-Blur, adaptive Bitrate/Auflösung.
+| *Could* | Trainings-Broadcast-Modus ~20, lokale Aufzeichnung, Text-Chat.
+| *Won't (jetzt)* | Login, native Mobile-Apps, > 20 Teilnehmer, selbst
+                    betriebene SFU.
+|===
+
+== Strategische Festlegungen
+
+=== Build statt Adopt (Build-vs-Buy)
+
+Jitsi Meet ist Open Source (Apache-2.0); EU-selbstgehostet _wäre_ souverän.
+Aber Self-Hosting verletzt G-2 (Infrastruktur) und brächte die abgelehnte
+Haken-UX und den schwachen Hintergrund mit. Entscheidung: die Lösung als
+serverloses P2P neu denken, nicht Jitsi forken. Begründung und Alternativen
+gehören in eine ADR der arc42-Architektur.
+
+=== Zugang ohne Login: Capability-URL statt Magic-Link-Dienst
+
+Ein E-Mail-Magic-Link bräuchte einen Versand- und Validierungsdienst — Infra
+(G-2) und ein Stück Security (G-3). Stattdessen: eine *Capability-URL*
+`https://…/#room=<uuid>`. Die UUID im URL-Fragment _ist_ das Geheimnis; der
+Host teilt den Link selbst über E-Mail/RCS. Besitz des Links = Zutritt, kein
+Backend, kein Login. Das URL-Fragment verlässt den Browser nicht, landet also
+nicht in Server-Logs. Sicherheitsmodell und Restrisiken (R-3) klärt die
+arc42-Architektur (Threat Model 8.1).
+
+== Bekannte Spannungen und Risiken
+
+[cols="1,1,4",options="header"]
+|===
+| ID | Priorität | Beschreibung und Behandlung
+| R-1 | hoch | *20 Teilnehmer vs. Mesh-Physik.* Im Full-Mesh lädt jeder Peer
+        `N-1` Streams hoch; ~20 sprengt Heim-Uplinks. Das Gegenmittel SFU _ist_
+        Infrastruktur (verletzt G-2). Spannung zwischen G-1/G-2 und G-7@20.
+        Optionen für spätere ADRs: (a) asymmetrische Broadcast-Topologie (nur
+        Trainer sendet Video, Zuhörer ggf. nur Audio), (b) selbst betriebene
+        EU-SFU (souverän, aber Infra), (c) realistisches Maximum < 20 setzen.
+        Entscheidung vertagt; blockiert R0–R4 nicht.
+| R-2 | mittel | *Verfügbarkeit/Stabilität souveräner STUN/Broker* gegenüber den
+        großen US-Diensten. Mitigation: mehrere EU/Community-Endpunkte, dank
+        G-6 austauschbar.
+| R-3 | mittel | *Capability-URL-Leak* → unerwünschter Beitritt (kein Auth).
+        Spätere Mitigation: Raum-ID rotieren, Host-Admit.
+| R-4 | mittel | *Hintergrund-Blur-Qualität/-Performance* im Browser muss Jitsi
+        schlagen, kostet aber CPU — Konflikt mit G-4 auf schwachen Geräten.
+| R-5 | niedrig | *Nur Browser*, keine native Mobile-Erfahrung.
+|===
+
+== Offene Fragen nach Rolle
+
+*Product Owner*
+
+* R5/Training: Ist Audio-only für Zuhörer akzeptabel, wenn das die ~20
+  überhaupt erst möglich macht? Oder muss jeder Zuhörer Video senden?
+* Gehört lokale Aufzeichnung später dazu (Trainings-Mitschnitt)?
+
+*Architekt*
+
+* R-1: Welche Topologie für ~20 — asymmetrischer Broadcast vs. eigene EU-SFU?
+  Entscheidet über die Verträglichkeit mit G-2.
+* Welcher souveräne STUN/Signaling-Broker (EU/Community) wird Default?
+
+*Developer*
+
+* Welche Browser-API für die Hintergrund-Segmentierung (z. B. Insertable
+  Streams + WASM-Modell) erfüllt G-5 ohne G-4 zu verletzen?
+
+*Domain-Experte (Trainer)*
+
+* Was ist die realistische Obergrenze echter Trainings-Gruppen — 12, 16, 20?
+
+*Operations*
+
+* Keine offenen Fragen — Betrieb ist per G-2 explizit ausgeschlossen
+  (statische Auslieferung).
