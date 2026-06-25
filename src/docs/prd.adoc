@@ -151,7 +151,7 @@ sit the slices, each a working increment through all layers.
 | R2 | 4-way mesh; host-relayed signaling (no broker, ADR-8); sovereign STUN; adapter seams | D-1, D-9, D-6 | *done* (EPIC 2)
 | R3 | Background blur/replacement, client-side | D-4 | *done* (EPIC 3, #25 — native platform blur, ADR-9; vendored-model adapter #26 deferred)
 | R4 | Adaptive bitrate/resolution under CPU/bandwidth pressure | D-7 | *done* (EPIC 4, #27)
-| R5 | Training mode ~20 (asymmetric topology) | D-5 | vision, ADR-bound
+| R5 | Training mode ~20 (asymmetric topology) | D-5 | topology decided (ADR-4: asymmetric broadcast); build is issue #31 (Could)
 |===
 
 The *Must* set (see Scope) is complete at the end of *R2*. Releases R1 and R2
@@ -313,8 +313,9 @@ priority and a mitigation hook for the later threat model (T-IDs in chapter 8.1)
 
 *Architect*
 
-* R-1: which topology for ~20 — asymmetric broadcast vs. own EU SFU? Decides
-  compatibility with G-2.
+* R-1: which topology for ~20 — *resolved* in ADR-4: asymmetric broadcast
+  (presenter-only video), infra-free, with the presenter-uplink cap accepted as
+  R-15. An own EU SFU stays rejected on G-2.
 * Which sovereign STUN/signaling broker (EU/community) becomes the default
   (R-2, D-9)?
 * R-6: is a TURN relay offered for IP privacy, accepting the infrastructure cost?

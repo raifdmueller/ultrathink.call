@@ -16,7 +16,7 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 |===
 | ID | Prob. | Impact | Priority | Mitigation (Ch. 8 / Ch. 10)
 | R-11 | High | High | *High* | The delivery host (GitHub Pages) is US-jurisdiction, contradicting G-1/QG-1 — the host serves the executable client code (T-003). ADR-6: accepted interim; migrate to the chosen sovereign target *Codeberg Pages (DE)* before claiming SM-2. Carried as TD-6, issue #10.
-| R-1 | Med | High | *High* | Topology decision deferred to ADR-4 / issue #3; does not block R0–R4. The central tension between G-1/G-2 and 20-peer scale.
+| R-1 | Low | Med | *Med* | *Reduced* by ADR-4: the ~20 topology now has a decided, infra-free answer (asymmetric broadcast, presenter-only video). The tension between G-1/G-2 and 20-peer scale is resolved in favour of sovereignty; the residual is the presenter-uplink cap (R-15). Does not block R0–R4.
 | R-12 | Med | High | *High* | No TURN (TC-7): behind symmetric/CGNAT NAT the call cannot establish (Runtime Scenario 2), directly threatening SM-1 (the round runs with no Zoom fallback). Mitigation: TURN relay deferred (issue #4) — adding it trades against G-2.
 | R-7 | Low | High | *High* | Signaling-path tampering. Host↔guest: M-1 (DTLS-fingerprint check, VR-9) + fingerprint over the capability channel (ADR-2). Mesh guest↔guest: relayed SDP is validated against a malicious *guest* (VR-9 on the mesh, authoritative `from`), but a malicious *host* could MITM guest↔guest media — *accepted residual* (trusted host, ADR-8).
 | R-3 | Low | Med | *Low* | M-4 (token is the bearer secret, CSPRNG room id, advisory share-carefully) + M-9 (60-min invite expiry, #29) bounds the replay window; single-use revocation still deferred. *Reduced* from Med: an expired forwarded link no longer admits, and M-8 moderation (R-9) now evicts a gate-crasher who slips in within the window.
@@ -29,6 +29,7 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | R-8 | Low | Med | *Low* | M-6 (prefer single window + pre-share warning).
 | R-13 | Med | Low | *Low* | Zero-egress (G-9) means no remote diagnostics; field failures are user-reported only. Accepted trade from ADR-1; no mitigation planned.
 | R-5 | Low | Low | *Low* | Accepted; browser-only, no native mobile (no mitigation planned).
+| R-15 | Med | Low | *Low* | Presenter-uplink cap (ADR-4): asymmetric broadcast still uploads one presenter-video copy per participant, so the realistic ceiling is the presenter's uplink, not a hard ~20. Accepted limitation of the infra-free choice; a later relay/SFU decision (#4) could lift it. Mitigation: adaptive media (BB-8) lowers per-stream cost; document the cap to trainers.
 |===
 
 === Technical Debt

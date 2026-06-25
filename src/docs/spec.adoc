@@ -35,8 +35,8 @@ has no backend, no API, and no login. Its "interfaces" are therefore the
 NOTE: Since R2 a call is a full mesh of up to four participants — one Host plus
 up to three Guests (D-1, ADR-8). The host bootstraps each guest and relays
 guest↔guest signaling; the use cases below describe the host/guest pair and apply
-per peer. The ~20 training topology (D-5/R5) extends this and remains open
-(ADR-4).
+per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadcast
+(ADR-4, decided; presenter-only video), bounded by R-15 and built in issue #31.
 
 == Eleven rules govern access, encryption, sovereignty, moderation, and privacy
 
