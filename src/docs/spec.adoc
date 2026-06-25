@@ -56,7 +56,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 | BR-11 | Background blur is offered only where the platform can deliver it natively (ADR-9); the System never reports blur active unless the platform confirmed it. On any failure it reverts the toggle and warns, so an unblurred frame is never presented as blurred (fail-closed). No segmentation model is fetched, so the CSP and sovereignty (G-1) are unchanged.
 |===
 
-== Six use cases cover hosting, joining, devices, sharing, moderation, and blur
+== Seven use cases cover hosting, joining, devices, sharing, moderation, blur, and self-mute
 
 === UC-1 Host a call
 
@@ -173,6 +173,24 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 * 1a. The platform has no native blur → the toggle stays disabled with an explanatory tooltip (BR-11, R-14).
 * 2a. Applying blur fails → System reverts the toggle and warns; no unblurred frame is presented as blurred (fail-closed, BR-11).
 * 3a. The actor switches to a camera that cannot blur while blur is on → blur is turned off with a warning (BR-11).
+
+=== UC-7 Self-mute microphone or camera
+
+* *Primary actor*: Host or Guest
+* *Goal*: Control what I send — silence my mic or turn my camera off — independently of the host.
+* *Trigger*: The actor toggles mic or camera.
+* *Preconditions*: A running local media session.
+* *Postconditions*: Peers receive silence (mic) / no video (camera) until toggled back; the local tile shows the muted state.
+
+.Main success scenario
+. Actor clicks *Mikro aus* / *Kamera aus*; System sets the local track's `enabled = false` — no renegotiation, the connection stays.
+. Peers receive silence / a black frame; the local tile shows a muted indicator.
+. Actor toggles back on; the track is re-enabled instantly.
+
+.Extensions
+* 2a. The actor switches the device while muted → the System re-applies the self-mute to the fresh track, so a switch does not silently unmute (#47).
+
+NOTE: This is *self*-mute (sender-side, `track.enabled`), distinct from host moderation (UC-5 / #28), which disables a *remote* peer's audio for everyone (receiver-side).
 
 == Each interface has a system use case
 
@@ -427,6 +445,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-21 | When the host opens a call (or the guest joins), the system shall start camera/mic and produce the invite (or answer) in a single action, and shall reveal in-call controls only once media is live. (UC-1, UC-2, #46)
 | EARS-22 | While a connection is pending (created but no peer connected), if the user attempts to leave or reload the page, the system shall warn before unload. (ADR-8, #46)
 | EARS-23 | The system shall present the answer as a copy/paste token, not an openable link; and when opened with an `#answer=` URL, shall show a guard instructing the user to paste it into the original call tab, never attempting a join. (#46)
+| EARS-24 | When the actor self-mutes the microphone or camera, the system shall set the local track's `enabled` to false without renegotiation, indicate the muted state on the local tile, and re-apply it after a device switch. (UC-7, #47)
 |===
 
 == Entities, states, and contracts complete the picture

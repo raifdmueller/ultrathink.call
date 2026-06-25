@@ -19,6 +19,13 @@ const $ = (id) => document.getElementById(id);
 const status = (msg) => { $("status").textContent = msg; };
 const show = (el, yes) => $(el).classList.toggle("hidden", !yes);
 
+// The wizard's mutually-exclusive panels: exactly one — or "none" — is active
+// (#50). Additive in-call surfaces (videos, callControls, inviteMore…) stay on
+// their own targeted show() calls; folding them in here would force a false
+// single-axis model.
+const STEPS = { start: "stepStart", invite: "stepInvite", answer: "stepAnswer", guard: "answerGuard" };
+function showStep(name) { for (const [k, id] of Object.entries(STEPS)) show(id, k === name); }
+
 let mesh = null;
 let localStream = null;
 let camTrack = null;
@@ -26,6 +33,8 @@ let pendingOffer = null;       // guest: the host's offer awaiting join
 let bootstrapPending = false;  // host: an invite is out, awaiting its answer
 let sharing = false;           // a screen share is active
 let blurOn = false;            // background blur requested by the user (#25)
+let micMuted = false;          // local self-mute, mic (#47)
+let camOff = false;            // local self-mute, camera (#47)
 let roomId = null;
 
 const getMedia = (c) => navigator.mediaDevices.getUserMedia(c);
@@ -182,7 +191,11 @@ async function switchTrack(kind, deviceId) {
     mesh?.setStream(localStream);
     $("localVideo").srcObject = localStream;
     status("Gerät gewechselt.");
+    // A fresh track is enabled by default — re-apply self-mute so a switch doesn't
+    // silently unmute/turn the camera back on (#47).
+    if (kind === "audio") applyMic();
     if (kind === "video") {
+      applyCam();
       refreshBlurAvailability();
       if (blurOn) {
         try { await applyBlur(true); }
@@ -226,6 +239,24 @@ $("blurToggle").addEventListener("click", async () => {
   }
 });
 
+// --- Local self-mute (#47): toggle track.enabled, no renegotiation ----------------
+// Distinct from host moderation (#28, receiver-side): this silences/blacks-out our
+// own outgoing track. Re-applied after a device switch (a fresh track is enabled).
+function applyMic() {
+  const t = localStream?.getAudioTracks()[0];
+  if (t) t.enabled = !micMuted;
+  $("muteMic").textContent = micMuted ? "Mikro an" : "Mikro aus";
+  show("localMicFlag", micMuted);
+}
+function applyCam() {
+  const t = localStream?.getVideoTracks()[0];
+  if (t) t.enabled = !camOff;
+  $("muteCam").textContent = camOff ? "Kamera an" : "Kamera aus";
+  show("localCamFlag", camOff);
+}
+$("muteMic").addEventListener("click", () => { micMuted = !micMuted; applyMic(); status(micMuted ? "Mikro aus." : "Mikro an."); });
+$("muteCam").addEventListener("click", () => { camOff = !camOff; applyCam(); status(camOff ? "Kamera aus." : "Kamera an."); });
+
 // --- The handshake: create an invite, ingest an invite/answer ---------------------
 // Returns true once an invite exists, false on refusal/failure — so callers only
 // commit UI transitions (hide start, arm the unload guard) on success.
@@ -239,7 +270,7 @@ async function createInvite() {
     applyShareChannels("shareInvite", "mailInvite");
     bootstrapPending = true;
     $("answerIn").value = "";
-    show("stepInvite", true);
+    showStep("invite");
     status("Einladung erstellt. Schick den Link, lass die Seite offen und füge die Antwort ein.");
     return true;
   } catch (err) {
@@ -263,7 +294,7 @@ async function ingestIncoming(text) {
       await mesh.acceptBootstrapAnswer(payload.sdp);
       bootstrapPending = false;
       clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false);
-      show("stepInvite", false);
+      showStep("none");
       status("Teilnehmer verbunden. Über „Weitere einladen“ kannst du weitere Personen hinzufügen.");
     }
   } catch (err) {
@@ -272,7 +303,7 @@ async function ingestIncoming(text) {
 }
 
 function showGuestStart() {
-  show("startHost", false); show("startGuest", true); show("stepStart", true);
+  show("startHost", false); show("startGuest", true); showStep("start");
   $("guestRoom").textContent = roomId ? "Raum: " + roomId : "";
 }
 
@@ -281,8 +312,7 @@ function showGuestStart() {
 $("openCall").addEventListener("click", async () => {
   $("openCall").disabled = true;
   if (!(await startMedia())) { $("openCall").disabled = false; return; }
-  if (await createInvite()) {
-    show("stepStart", false);
+  if (await createInvite()) {   // createInvite shows the invite step on success
     show("inviteMore", true);
     armUnloadGuard();
   } else {
@@ -300,7 +330,7 @@ $("join").addEventListener("click", async () => {
     const answer = await mesh.joinWithOffer(pendingOffer);
     $("answerCode").value = await buildCapabilityUrl("answer", roomId, answer);
     applyShareChannels("shareAnswer", "mailAnswer");
-    show("stepStart", false); show("stepAnswer", true);
+    showStep("answer");
     armUnloadGuard();
     status("Antwort erzeugt. Schick sie dem Host zurück.");
   } catch (err) {
@@ -357,6 +387,7 @@ $("shareScreen").addEventListener("click", async () => {
     for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
     sharing = true;
     $("localVideo").srcObject = display;
+    show("localCamFlag", false); // the screen is being sent, not the (off) camera
     $("shareScreen").disabled = true; show("stopShare", true);
     refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
@@ -373,6 +404,7 @@ async function restoreCamera() {
   $("localVideo").srcObject = localStream;
   $("shareScreen").disabled = false; show("stopShare", false);
   status("Zurück auf Kamera.");
+  applyCam(); // restore the camera-off state + tile flag the share hid (#47)
   // The restored camera frame is unblurred until re-applied; re-assert fail-closed (#25).
   refreshBlurAvailability();
   if (blurOn) {
@@ -393,7 +425,7 @@ async function restoreCamera() {
     } else {
       // An #answer= link was opened — it belongs in the host's open call tab (#46).
       $("guardCode").value = location.href;
-      show("stepStart", false); show("answerGuard", true);
+      showStep("guard");
       status("Das ist eine Antwort — kopiere sie und füge sie im Call-Tab ein.");
     }
   }).catch((err) => status("Link konnte nicht gelesen werden: " + err.message));

@@ -156,6 +156,35 @@ test("opening an answer link shows the guard, not a broken join (#46)", async ({
   await expect(stray.locator("#guardCode")).not.toHaveValue("");
 });
 
+test("self-mute toggles the local mic and camera (#47)", async ({ browser }) => {
+  const { page } = await newPeer(browser);
+  await page.goto("/");
+  await page.click("#openCall"); // media live → in-call controls appear
+  await expect(page.locator("#muteMic")).toBeVisible();
+
+  const enabled = (kind) => page.evaluate((k) =>
+    document.querySelector("#localVideo").srcObject[k === "audio" ? "getAudioTracks" : "getVideoTracks"]()[0].enabled, kind);
+
+  await page.click("#muteMic");
+  expect(await enabled("audio")).toBe(false);
+  await expect(page.locator("#muteMic")).toHaveText("Mikro an");
+  await expect(page.locator("#localMicFlag")).toBeVisible();
+  await page.click("#muteMic");
+  expect(await enabled("audio")).toBe(true);
+  await expect(page.locator("#localMicFlag")).toBeHidden();
+
+  await page.click("#muteCam");
+  expect(await enabled("video")).toBe(false);
+  await expect(page.locator("#muteCam")).toHaveText("Kamera an");
+  await expect(page.locator("#localCamFlag")).toBeVisible();
+
+  // A device switch acquires a fresh track (enabled by default) — the mute must
+  // survive it (#47 re-apply path).
+  await page.evaluate(() => document.getElementById("camSelect").dispatchEvent(new Event("change")));
+  await expect(page.locator("#status")).toHaveText("Gerät gewechselt.", { timeout: 10000 });
+  expect(await enabled("video")).toBe(false);
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");
