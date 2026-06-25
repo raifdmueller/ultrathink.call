@@ -30,8 +30,9 @@ the full quality tree is in Chapter 10. Each goal names its approach in Chapter 
 |===
 
 The goals are ranked *QG-1 > QG-2 > QG-3 > QG-4 > QG-5* — sovereignty shapes
-every decision. The ranking is the tie-breaker in ADR-3 and ADR-6 and the
-decision criterion for the still-open topology choice (ADR-4).
+every decision. The ranking is the tie-breaker in ADR-3 and ADR-6 and was the
+deciding criterion for the topology choice (ADR-4, now decided: asymmetric
+broadcast).
 
 CAUTION: The current delivery host (GitHub Pages) is US-jurisdiction — an open
 gap against QG-1, tracked as risk R-11 and decision ADR-6.

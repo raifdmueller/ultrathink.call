@@ -313,8 +313,9 @@ priority and a mitigation hook for the later threat model (T-IDs in chapter 8.1)
 
 *Architect*
 
-* R-1: which topology for ~20 — asymmetric broadcast vs. own EU SFU? Decides
-  compatibility with G-2.
+* R-1: which topology for ~20 — *resolved* in ADR-4: asymmetric broadcast
+  (presenter-only video), infra-free, with the presenter-uplink cap accepted as
+  R-15. An own EU SFU stays rejected on G-2.
 * Which sovereign STUN/signaling broker (EU/community) becomes the default
   (R-2, D-9)?
 * R-6: is a TURN relay offered for IP privacy, accepting the infrastructure cost?
