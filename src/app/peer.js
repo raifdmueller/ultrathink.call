@@ -31,18 +31,30 @@ export function waitForIce(peer, timeoutMs = ICE_TIMEOUT_MS) {
 
 export class PeerSession {
   // isOfferer creates the ctrl data channel; the answerer receives it.
-  constructor({ stream, isOfferer = false, onTrack, onState, onCtrl, iceConfig = ICE_CONFIG }) {
+  constructor({ stream, isOfferer = false, onTrack, onScreenTrack, onState, onCtrl, iceConfig = ICE_CONFIG }) {
     this.pc = new RTCPeerConnection(iceConfig);
     this.videoSender = null;
     this.audioSender = null;
+    this.screenSender = null;   // the reserved second video slot (#67)
     this.ctrl = null;
     this._ctrlQueue = [];
     this._onCtrl = onCtrl;
     this.remoteStream = null;
+    this.screenStream = null;
 
+    // Two video transceivers per peer: the camera and a reserved screen slot.
+    // Tell their incoming tracks apart by the msid: camera and mic are added with
+    // the main stream (so they arrive with a populated `e.streams`), while the
+    // screen slot is added with no stream — its track arrives with empty
+    // `e.streams`. That presence test is the routing key (#67).
     this.pc.addEventListener("track", (e) => {
-      this.remoteStream = e.streams[0];
-      onTrack && onTrack(e.streams[0]);
+      if (e.streams && e.streams[0]) {
+        this.remoteStream = e.streams[0];
+        onTrack && onTrack(e.streams[0]);
+      } else {
+        this.screenStream = new MediaStream([e.track]);
+        onScreenTrack && onScreenTrack(this.screenStream);
+      }
     });
     this.pc.addEventListener("connectionstatechange", () => onState && onState(this.pc.connectionState));
 
@@ -54,12 +66,25 @@ export class PeerSession {
       });
     }
 
+    // Camera + mic via addTrack (with the main stream, so the remote gets the
+    // msid that the track-routing above keys on). Then a SECOND video transceiver
+    // is reserved empty at bootstrap — the screen slot — so a screen can later be
+    // sent via replaceTrack WITHOUT renegotiation (the mesh never renegotiates
+    // after connect, ADR-8, #67).
     if (stream) {
       for (const track of stream.getTracks()) {
         const sender = this.pc.addTrack(track, stream);
         if (track.kind === "video") this.videoSender = sender;
         if (track.kind === "audio") this.audioSender = sender;
       }
+    }
+    // Only the OFFERER reserves the screen transceiver here. A pre-added
+    // transceiver on the answerer does NOT associate with the offer's screen
+    // m-line (the browser orphans it and answers the m-line recvonly), so the
+    // answerer would never be able to share. The answerer instead claims and
+    // promotes the offered slot to sendrecv in createAnswer().
+    if (isOfferer) {
+      this.screenSender = this.pc.addTransceiver("video", { direction: "sendrecv" }).sender;
     }
   }
 
@@ -92,6 +117,14 @@ export class PeerSession {
 
   async createAnswer(remoteOffer) {
     await this.pc.setRemoteDescription(remoteOffer);
+    // Claim the offered screen slot (#67) and make it bidirectional so we can
+    // share too — otherwise the answered m-line defaults to recvonly. It is the
+    // lone video transceiver carrying no outgoing track of our own (camera/mic
+    // were added with addTrack and own their senders).
+    if (!this.screenSender) {
+      const trx = this.pc.getTransceivers().find((t) => t.receiver.track?.kind === "video" && !t.sender.track);
+      if (trx) { trx.direction = "sendrecv"; this.screenSender = trx.sender; }
+    }
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
     await waitForIce(this.pc);
@@ -104,6 +137,8 @@ export class PeerSession {
 
   async replaceVideo(track) { if (this.videoSender) await this.videoSender.replaceTrack(track); }
   async replaceAudio(track) { if (this.audioSender) await this.audioSender.replaceTrack(track); }
+  // Push a screen track into the reserved slot (#67), or null to stop sharing.
+  async replaceScreen(track) { if (this.screenSender) await this.screenSender.replaceTrack(track); }
 
   // Outbound video health for the adaptive controller (#27, BB-8). Returns the
   // browser's own quality-limitation verdict ("cpu" | "bandwidth" | "none") and

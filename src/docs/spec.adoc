@@ -119,20 +119,24 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 
 .Extensions
 * 3a. Device acquisition fails (in use/removed) → System reports it and keeps the previous track.
-* 2a. A screen share is active → device row is hidden; selection resumes after the share ends.
+* 2a. A screen share is active → the camera keeps flowing (#67), so the camera device can still be switched while sharing.
 
 === UC-4 Share the screen
 
 * *Primary actor*: Host or Guest
-* *Goal*: Show the screen/window to the other participant.
+* *Goal*: Show the screen/window to the other participants *while staying on camera*.
 * *Trigger*: The actor starts sharing.
 * *Preconditions*: A running local media session.
-* *Postconditions*: The outgoing video is the shared surface until sharing stops, then the camera returns.
+* *Postconditions*: The screen is sent as a *second* video alongside the camera until sharing stops; the camera never stops (#67).
 
 .Main success scenario
 . Actor starts sharing; System warns about oversharing (R-8) and requests display capture, preferring a single window.
-. System replaces the outgoing video track with the screen track; the other participant sees the screen.
-. Actor stops sharing (in-app or via the browser UI); System restores the current camera track.
+. System sends the screen track into the reserved second video slot of every peer (`setSharing` → `replaceScreen`, no renegotiation) and announces it over `ctrl`; the camera keeps sending. Each participant keeps the camera tiles and sees the shared screen rendered large below the camera row.
+. Actor stops sharing (in-app or via the browser UI); System stops the screen track, announces the stop, and the screen area disappears — the camera was never interrupted.
+
+.Extensions
+* 2a. A participant joins mid-share → on connect it receives the screen track and the share announcement, so it sees the ongoing share immediately.
+* 3a. A sharing participant leaves or is kicked → its screen area is removed for everyone.
 
 .Extensions
 * 1a. Actor cancels the picker → no change; System reports the cancellation.
@@ -336,8 +340,9 @@ split again
   if (picker confirmed?) then (no)
     :report cancellation;
   else (yes)
-    :replaceTrack(screen); hide device row;
-    :on stop -> restore current camera track;
+    :replaceScreen(screen) into reserved slot (camera keeps sending);
+    :announce share over ctrl; show screen large below cameras;
+    :on stop -> stop screen track, announce stop, hide screen area;
   endif
 endsplit
 stop
@@ -413,6 +418,13 @@ Scenario: Whole-screen share warns first
   Then a warning about other windows/notifications is shown
   And the picker requests a single window by preference
 
+# UC-4 / #67 — the screen is a second video, the camera is not replaced
+Scenario: Sharing the screen keeps the camera on
+  Given a connected participant who shares the screen
+  Then the camera tile keeps showing the camera for every peer
+  And the shared screen is rendered large below the camera row
+  And the connection state stays "connected" with no new offer/answer exchanged
+
 # R-10 — supply-chain hardening (covers the static page integrity)
 Scenario: The page ships a restrictive CSP and no external scripts
   When the page loads
@@ -449,7 +461,7 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-3 | While a bootstrap invite is already open (awaiting its answer), if the host requests another invite, the system shall refuse it with a message. (BR-6, GD-1)
 | EARS-4 | If ICE gathering does not complete within the timeout, the system shall emit the candidates gathered so far. (UC-1 3a)
 | EARS-5 | When applying a remote description, the system shall reject any SDP that does not carry a DTLS fingerprint, and shall not fall back to plaintext. (G-8, SM-7, VR-9)
-| EARS-6 | While a screen share is active, the system shall hide device selection and shall restore the current camera track when sharing stops. (UC-4)
+| EARS-6 | When a screen share starts, the system shall send the screen as a second video alongside the (still-running) camera and render it large below the camera row, and when it stops shall remove the screen and leave the camera uninterrupted. (UC-4, #67)
 | EARS-7 | The system shall not transmit participant media, identifiers, or the capability token to any server it or a third party operates. (G-9, SM-8)
 | EARS-8 | The system shall use only STUN/ICE endpoints operated outside US jurisdiction; the full host/CDN/DNS audit is deferred to SM-2/R2. (G-1)
 | EARS-9 | When a device is switched, the system shall replace the outgoing track in place without renegotiation. (UC-3)

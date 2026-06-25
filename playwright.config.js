@@ -20,6 +20,8 @@ export default defineConfig({
       args: [
         "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream",
+        // Let getDisplayMedia resolve headlessly without a picker (screen-share #67 E2E).
+        "--auto-select-desktop-capture-source=Entire screen",
         "--autoplay-policy=no-user-gesture-required",
       ],
     },

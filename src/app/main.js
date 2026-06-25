@@ -92,6 +92,8 @@ const removeTile = (peerId) => document.getElementById("tile-" + peerId)?.remove
 // We were kicked: drop every remote tile and reset, so the call ends cleanly.
 function clearRemoteTiles() {
   document.querySelectorAll("#videos .tile[id]").forEach((t) => t.remove());
+  remoteScreens.clear();
+  [...screenShares.keys()].forEach((owner) => { if (owner !== "self") setScreenShare(owner, null); });
 }
 
 function ensureMesh(isHost) {
@@ -101,10 +103,14 @@ function ensureMesh(isHost) {
       stream: localStream,
       isHost,
       onPeerStream: (id, s) => { setTile(id, s); onPeerConnected(id); },
-      onPeerLeave: (id) => { removeTile(id); if (!mesh || mesh.peers.size === 0) endAdapt(); },
+      onPeerLeave: (id) => { removeTile(id); remoteScreens.delete(id); setScreenShare(id, null); if (!mesh || mesh.peers.size === 0) endAdapt(); },
       onStatus: (m) => status(m),
-      onKicked: () => { clearRemoteTiles(); endAdapt(); disarmUnloadGuard(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
+      onKicked: () => { stopSharing(); clearRemoteTiles(); endAdapt(); disarmUnloadGuard(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
       onChat: (fromId, text) => appendChat(peerLabel(fromId), text),
+      // A peer's screen track arrives at connect (#67); we only SHOW it once that
+      // peer announces it is sharing — the track itself stays idle until then.
+      onScreenStream: (id, s) => { remoteScreens.set(id, s); },
+      onScreenShare: (id, on) => setScreenShare(id, on ? remoteScreens.get(id) : null),
     });
   }
   return mesh;
@@ -185,7 +191,7 @@ async function switchTrack(kind, deviceId) {
       : { audio: { deviceId: { exact: deviceId } } });
     const track = (kind === "video" ? stream.getVideoTracks() : stream.getAudioTracks())[0];
     for (const s of (mesh ? mesh.peers.values() : [])) {
-      if (kind === "video") { if (!sharing) await s.replaceVideo(track); }
+      if (kind === "video") await s.replaceVideo(track); // the camera slot — independent of any active share (#67)
       else await s.replaceAudio(track);
     }
     const old = (kind === "video" ? localStream.getVideoTracks() : localStream.getAudioTracks())[0];
@@ -218,7 +224,9 @@ const BLUR_OFF_LABEL = "Hintergrund verwischen";
 const BLUR_ON_LABEL = "Hintergrund anzeigen";
 
 function refreshBlurAvailability() {
-  const ok = !sharing && !!camTrack && supportsBlur(camTrack);
+  // Blur targets the camera, which now keeps flowing during a screen share (#67),
+  // so it stays available throughout — no longer gated on `sharing`.
+  const ok = !!camTrack && supportsBlur(camTrack);
   $("blurToggle").disabled = !ok;
   $("blurToggle").title = ok ? "" : UNSUPPORTED_MSG;
 }
@@ -408,7 +416,7 @@ $("join").addEventListener("click", async () => {
 $("pasteLoad").addEventListener("click", () => ingestIncoming($("pasteIn").value));
 $("answerLoad").addEventListener("click", () => ingestIncoming($("answerIn").value));
 $("inviteMore").addEventListener("click", () => createInvite());
-$("leaveCall").addEventListener("click", () => { disarmUnloadGuard(); answerChannel?.close(); answerChannel = null; mesh?.close(); mesh = null; location.reload(); });
+$("leaveCall").addEventListener("click", () => { stopSharing(); disarmUnloadGuard(); answerChannel?.close(); answerChannel = null; mesh?.close(); mesh = null; location.reload(); });
 
 // --- Distribution: native share / clipboard / mailto (#42) -----------------------
 function applyShareChannels(shareId, mailId) {
@@ -464,7 +472,29 @@ $("shareAnswer").addEventListener("click", () => sharePayload({ title: ANSWER_MS
 $("mailInvite").addEventListener("click", () => { location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, linkUrl("inviteLink")); });
 $("mailAnswer").addEventListener("click", () => { location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, $("answerCode").value); });
 
-// --- Screen sharing (applies to every peer) --------------------------------------
+// --- Screen sharing (#67): a SECOND video alongside the camera -------------------
+// The screen is sent into each peer's reserved screen slot (mesh.setSharing), so
+// the camera keeps flowing in its tile and the screen is shown large below the
+// camera row — never replacing the camera. Remote screens arrive the same way.
+let screenStream = null; // our own getDisplayMedia stream while sharing
+
+// One large screen area, keyed by owner ("self" or a peerId). Last sharer wins;
+// when one stops, an earlier still-active share reappears.
+const screenShares = new Map();  // owner -> MediaStream (currently shown)
+const remoteScreens = new Map(); // peerId -> their screen track stream (arrives at connect)
+function renderScreen() {
+  const entries = [...screenShares.entries()];
+  if (!entries.length) { $("screenVideo").srcObject = null; show("sharedScreen", false); return; }
+  const [owner, stream] = entries[entries.length - 1];
+  $("screenVideo").srcObject = stream;
+  $("screenLabel").textContent = owner === "self" ? "Dein Bildschirm" : peerLabel(owner) + " teilt den Bildschirm";
+  show("sharedScreen", true);
+}
+function setScreenShare(owner, stream) {
+  if (stream) screenShares.set(owner, stream); else screenShares.delete(owner);
+  renderScreen();
+}
+
 $("shareScreen").addEventListener("click", async () => {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     status("Bildschirm teilen wird auf diesem Browser/Gerät nicht unterstützt (z. B. mobil).");
@@ -473,35 +503,28 @@ $("shareScreen").addEventListener("click", async () => {
   // Pre-share warning (#30 / R-8): remind before any frame is sent.
   if (!confirm("Teile nur das gewünschte Fenster — andere Fenster und Benachrichtigungen könnten sichtbar werden. Fortfahren?")) return;
   try {
-    const display = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
-    const screenTrack = display.getVideoTracks()[0];
-    for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" } });
+    const screenTrack = screenStream.getVideoTracks()[0];
+    mesh?.setSharing(true, screenTrack); // into the reserved slot; camera keeps sending
     sharing = true;
-    $("localVideo").srcObject = display;
-    show("localCamFlag", false); // the screen is being sent, not the (off) camera
+    setScreenShare("self", screenStream); // show our own screen big, below the cameras
     $("shareScreen").disabled = true; show("stopShare", true);
-    refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
-    screenTrack.addEventListener("ended", restoreCamera);
+    screenTrack.addEventListener("ended", stopSharing); // OS "stop sharing" affordance
   } catch (err) {
     status("Screensharing abgebrochen: " + err.message);
   }
 });
-$("stopShare").addEventListener("click", restoreCamera);
-async function restoreCamera() {
+$("stopShare").addEventListener("click", stopSharing);
+function stopSharing() {
+  if (!sharing) return;
   sharing = false;
-  camTrack = localStream.getVideoTracks()[0] || camTrack;
-  for (const s of (mesh ? mesh.peers.values() : [])) if (camTrack) await s.replaceVideo(camTrack);
-  $("localVideo").srcObject = localStream;
+  mesh?.setSharing(false);
+  screenStream?.getTracks().forEach((t) => t.stop());
+  screenStream = null;
+  setScreenShare("self", null);
   $("shareScreen").disabled = false; show("stopShare", false);
-  status("Zurück auf Kamera.");
-  applyCam(); // restore the camera-off state + tile flag the share hid (#47)
-  // The restored camera frame is unblurred until re-applied; re-assert fail-closed (#25).
-  refreshBlurAvailability();
-  if (blurOn) {
-    try { await applyBlur(true); }
-    catch { revertBlur("Blur nach dem Teilen nicht wiederhergestellt — aus."); }
-  }
+  status("Bildschirm-Teilen beendet.");
 }
 
 // --- On load: an invite (→ join) or an answer opened by mistake (→ guard) ---------

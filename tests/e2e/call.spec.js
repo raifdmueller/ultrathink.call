@@ -284,6 +284,55 @@ test("the invite copies as a rich HTML link plus a plain-text fallback (#60)", a
   await ctx.close();
 });
 
+test("sharing the screen keeps the cameras and shows the screen large below them (#67)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+  await host.goto("/");
+  await bootstrap(host, guest);
+  await tileHasStream(host, "p1");
+  await tileHasStream(guest, "host");
+
+  host.on("dialog", (d) => d.accept()); // accept the oversharing confirm()
+  await host.click("#shareScreen");
+
+  // The guest sees the shared screen big, below the camera row...
+  await expect(guest.locator("#sharedScreen")).toBeVisible({ timeout: 20000 });
+  await expect.poll(
+    () => guest.evaluate(() => !!document.querySelector("#screenVideo")?.srcObject),
+    { timeout: 20000 }
+  ).toBe(true);
+  await expect(guest.locator("#screenLabel")).toContainText("teilt den Bildschirm");
+  // ...while the host's camera tile (the guest's view of the host) keeps streaming
+  // and the call stays connected — no renegotiation tore it down.
+  await tileHasStream(guest, "host");
+  await tileHasStream(host, "p1");
+
+  await host.click("#stopShare");
+  await expect(guest.locator("#sharedScreen")).toBeHidden({ timeout: 20000 });
+});
+
+test("being kicked while sharing tears the screen share down (#67)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+  await host.goto("/");
+  await bootstrap(host, guest);
+  await tileHasStream(host, "p1");
+
+  guest.on("dialog", (d) => d.accept());
+  await guest.click("#shareScreen");
+  await expect(guest.locator("#stopShare")).toBeVisible({ timeout: 20000 });
+  await expect(host.locator("#sharedScreen")).toBeVisible({ timeout: 20000 }); // host sees the guest's screen
+
+  // Host kicks the sharing guest: the guest's local share must be torn down
+  // (capture stopped, controls reset) and the host's screen area cleared.
+  await host.locator("#tile-p1").getByRole("button", { name: "Entfernen" }).click();
+  await expect(guest.locator("#status")).toContainText("entfernt", { timeout: 20000 });
+  await expect(guest.locator("#stopShare")).toBeHidden();
+  await expect(guest.locator("#shareScreen")).toBeEnabled();
+  await expect(guest.locator("#sharedScreen")).toBeHidden();
+  await expect(host.locator("#sharedScreen")).toBeHidden({ timeout: 20000 });
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");
