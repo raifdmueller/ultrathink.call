@@ -6,37 +6,42 @@ static page, runs straight from GitHub Pages.
 See `src/docs/prd.adoc` for the product requirements and `CLAUDE.md` for the
 engineering contract this project follows.
 
-## Status: slice R1
+## Status: R2 — four-peer mesh
 
 A working vertical slice through every layer:
 
 - **Media**: camera + microphone via `getUserMedia`, with **device selection**
   (switch camera/mic live via `replaceTrack`).
-- **Connection**: `RTCPeerConnection`, peer-to-peer.
-- **NAT**: public Google STUN, **no TURN** (deliberate limitation).
-- **Signaling**: server-less. The SDP offer/answer is gzip-compressed and carried
-  in the URL fragment (`#invite=`/`#answer=`), shared through the host's own mail
-  client (`mailto:`). The room id is a CSPRNG UUIDv4.
+- **Mesh**: a full mesh of up to four peers. The host bootstraps each guest with
+  a capability-URL, then **relays guest↔guest signaling over data channels** so
+  everyone connects directly — **no broker, no server** (ADR-8). Media stays
+  peer-to-peer; the host only forwards tiny SDP messages.
+- **NAT**: sovereign STUN (Nextcloud, DE), **no TURN** (deliberate limitation).
+- **Signaling**: server-less. The SDP is gzip-compressed and carried in the URL
+  fragment (`#invite=`/`#answer=`), shared via the host's own `mailto:`. The room
+  id is a CSPRNG UUIDv4.
 - **Screen sharing**: `getDisplayMedia` + `replaceTrack` (no renegotiation).
 
-No dependencies, no build. Opening `index.html` is enough.
+No runtime dependencies, no build — the app is static ES modules. `vitest` +
+Playwright are dev-only tooling.
 
-## How it works (2 people)
+## How it works (up to 4 people)
 
-1. **Host**: start camera + mic, then **Einladung erstellen**. Send the invite
-   link via **Per E-Mail einladen** (or copy it).
+1. **Host**: start camera + mic, then **Einladung erstellen** → send the invite
+   link to one guest. Paste their answer into **Empfangen & verbinden**. Repeat
+   **once per guest**.
 2. **Guest**: open the link, start camera + mic, **Beitreten & Antwort
    erzeugen**, and send the answer link back to the host.
-3. **Host**: paste the answer link into **Empfangen & verbinden** → **Laden /
-   Übernehmen**. The call connects.
+3. Once two or more guests are in, the **guests connect to each other
+   automatically** through the host relay — a full mesh.
 
-> Tip: to test locally, open `index.html` in two browser windows and pass the
-> invite/answer links between them.
+> Tip: to test locally, run `npm run e2e` (drives a real 3-peer mesh), or open
+> several browser windows and pass the invite/answer links between them.
 
-## Deliberate limitations (R1)
+## Deliberate limitations (R2)
 
-- **2 people only.** A full mesh for 4 (`4·3/2 = 6` connections) needs automatic
-  signaling, which arrives in R2.
+- **Up to ~4 people.** A full mesh has every peer upload to every other; ~20
+  needs a different topology (open decision, issue #3).
 - **No TURN.** Behind symmetric NAT / strict firewalls a peer may fail to connect.
 - **The invite link carries the host's public IP** (PRD risk R-6) — share it only
   with the people you invite.

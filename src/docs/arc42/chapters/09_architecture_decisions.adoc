@@ -15,6 +15,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-5 | Ports and adapters for external dependencies | Accepted
 | ADR-6 | Static host: GitHub Pages interim, target Codeberg Pages (DE) | Accepted
 | ADR-7 | ES modules + dev-only test tooling (no app build) | Accepted (inferred)
+| ADR-8 | Mesh without a broker — host-relayed signaling | Accepted (owner)
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -54,9 +55,10 @@ distribute via the host's own `mailto:`. The automatic broker is a later adapter
 |===
 
 *Consequences*: chosen for full sovereignty and zero backend; creates *R-3*
-(token leak/replay — no revocation) and is verbose at scale, which motivates the
-R2 broker adapter (issue #7). DTLS-fingerprint exchange over the capability
-channel partially mitigates *R-7*.
+(token leak/replay — no revocation) and is verbose at scale. R2 keeps this for
+host↔guest bootstrap and adds host-relayed guest↔guest signaling (ADR-8) rather
+than a broker. DTLS-fingerprint exchange over the capability channel partially
+mitigates *R-7*.
 
 === ADR-3 Sovereign (non-US) STUN; no Google
 
@@ -174,3 +176,39 @@ split the JavaScript into native ES modules under `src/app/` loaded with
 `script-src 'self'` — this closes the T-010 gap M-2 previously leaned on M-3 for.
 Dev dependencies are added but never served (the app is still static, no build).
 Creates no new tracked risk.
+
+=== ADR-8 Mesh without a broker — host-relayed signaling
+
+*Status*: Accepted (owner decision, EPIC 2). *Context*: the 4-peer mesh (R2)
+needs automatic guest↔guest signaling. An external broker (even a sovereign one)
+adds a runtime dependency and a non-US-relay trust question; the owner chose to
+keep full sovereignty and the zero-dependency posture. *Decision*: no broker.
+Host↔guest links are bootstrapped manually (capability-URL, one invite per
+guest); the host then *relays the tiny SDP control messages* between guest pairs
+over the `ctrl` data channels until a full mesh forms. The host relays signaling
+only — media stays direct P2P (DTLS-SRTP), never through the host.
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Vendored broker (Trystero) — datum | Self-built relay | Host-relayed (no broker)
+| Sovereignty (G-1) | 0 | +1 | +1
+| Zero dependencies / no build | 0 | 0 | +1
+| Host UX at 4 | 0 | +1 | -1
+| Scales toward ~20 | 0 | +1 | -1
+| *Sum* | *0* | *+3* | *0*
+|===
+
+The self-built-relay option scores higher on paper but still needs an external
+relay endpoint; the owner weighted *no external relay at all* above UX and
+scale, breaking the tie toward host-relayed (QG-1 top-ranked).
+
+*Consequences*: full sovereignty and zero dependencies; the host does one
+capability-URL exchange per guest (clunkier UX, accepted), and is a signaling
+single-point-of-failure *during setup* (not for established media). Because the
+host relays guest↔guest SDP, a *malicious host* could rewrite the fingerprints
+and MITM guest↔guest media (R-7) — *accepted residual*, since the host is the
+trusted meeting organizer. Against a malicious *guest*, the relayed SDP is still
+validated (DTLS fingerprint, VR-9 on the mesh) and the host stamps the
+authoritative sender id, so a guest cannot downgrade encryption or impersonate a
+peer. Practically caps at a small mesh — the ~20 training case remains
+R-1/ADR-4. Realized in `src/app/mesh.js`.

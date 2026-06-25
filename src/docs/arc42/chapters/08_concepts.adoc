@@ -27,10 +27,16 @@ register (Chapter 11). Decided context: ADR-1 (server-less P2P), ADR-2
 | T-011 | Information Disclosure | The fragment token leaks via the HTTP `Referer` header or `window.opener` when a link is followed. | closed by M-7
 |===
 
-Two further threats are named but deferred to the R2/R3 designs: a malicious
-*remote peer* sending abusive SDP/ICE candidates beyond the DTLS-fingerprint
-check (R2 broker design — VR coverage extends there), and broker-side room-id
-*claim collision/squatting* at R2 (broker adapter design).
+The R2 mesh (ADR-8, no broker) brings the relay path in scope. It is handled,
+not deferred: relayed guest↔guest SDP is validated for a DTLS fingerprint (the
+mesh equivalent of VR-9), the host stamps the authoritative sender id (a guest
+cannot spoof `from`), ctrl messages are schema-checked and size-capped, and the
+peer count is capped (anti-DoS). One residual remains accepted: because the host
+relays guest↔guest SDP, a *malicious host* could MITM guest↔guest media (R-7) —
+accepted because the host is the trusted meeting organizer (a peer round of known
+experts); guest↔guest media is only as trustworthy as the host. A malicious
+*remote peer* abusing ICE-candidate contents beyond the fingerprint check stays
+a documented residual.
 
 === Security
 

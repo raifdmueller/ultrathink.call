@@ -62,15 +62,16 @@
 <body>
   <h1>ultrathink.call</h1>
   <p class="lead">
-    Souveräner P2P-Videocall für 2 Personen, ohne eigenen Server. Du wählst Kamera und
-    Mikrofon, lädst per Link (E-Mail) ein, teilst optional den Bildschirm. Souveräner STUN
-    (Nextcloud, DE), kein TURN. Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze
-    R-6) — teile ihn nur mit den eingeladenen Personen.
+    Souveräner P2P-Videocall (Mesh, bis zu 4 Personen), ohne eigenen Server. Der Host lädt
+    jede Person per Link (E-Mail) ein; danach verbinden sich alle automatisch direkt. Kamera-/
+    Mikrofonwahl und Screensharing inklusive. Souveräner STUN (Nextcloud, DE), kein TURN.
+    Hinweis: Der Einladungs-Link enthält deine IP (bekannte Grenze R-6) — teile ihn nur mit den
+    eingeladenen Personen.
   </p>
 
-  <div class="videos">
+  <div class="videos" id="videos">
     <div class="tile"><video id="localVideo" autoplay playsinline muted></video><span>Du (lokal)</span></div>
-    <div class="tile"><video id="remoteVideo" autoplay playsinline></video><span>Gegenüber</span></div>
+    <!-- one tile per remote peer is injected here -->
   </div>
 
   <div class="controls">

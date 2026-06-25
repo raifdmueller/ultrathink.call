@@ -32,9 +32,11 @@ has no backend, no API, and no login. Its "interfaces" are therefore the
 | System | — | The browser app: media capture, WebRTC, token codec, validation.
 |===
 
-NOTE: At R1 a call has exactly two participants (one Host, one Guest). The mesh
-for up to four (D-1/R2) and the training topology (D-5/R5) extend, but do not
-contradict, these use cases.
+NOTE: Since R2 a call is a full mesh of up to four participants — one Host plus
+up to three Guests (D-1, ADR-8). The host bootstraps each guest and relays
+guest↔guest signaling; the use cases below describe the host/guest pair and apply
+per peer. The ~20 training topology (D-5/R5) extends this and remains open
+(ADR-4).
 
 == Eight rules govern access, encryption, and sovereignty
 
@@ -46,7 +48,7 @@ contradict, these use cases.
 | BR-3 | Media and data channels are DTLS-SRTP encrypted with no plaintext fallback (G-8); a remote description that does not negotiate a DTLS fingerprint is refused (VR-9).
 | BR-4 | No participant data is sent to or stored on any server (G-9); the token travels only over channels the Host chooses (e.g. `mailto:`).
 | BR-5 | Every runtime endpoint is operated outside US jurisdiction (G-1). At R1 the only configured signaling endpoint is a non-US STUN server; the full endpoint audit (host, CDN, DNS) is SM-2/R2.
-| BR-6 | A session holds exactly one peer connection at R1; a second is refused with a message, not silently created.
+| BR-6 | Each pair of participants holds at most one peer connection. The host bootstraps one connection per guest (capability-URL) and relays guest↔guest signaling so a full mesh forms (ADR-8, no broker); a duplicate connection to an existing peer is not created.
 | BR-7 | An incoming token is acted on only after it passes every validation rule; an invalid token yields a message and no state change.
 | BR-8 | Untrusted token text is treated as data only — never evaluated, never inserted as HTML — and enters the System solely through SYS-UC-2.
 |===
@@ -349,7 +351,7 @@ Scenario: No US endpoint in the runtime path
 | ID | Requirement (EARS)
 | EARS-1 | When the host requests an invite, the system shall generate a CSPRNG UUIDv4 room id and a `#invite=` capability-URL. (SM-6, UC-1)
 | EARS-2 | When a capability token is loaded, the system shall validate it against the decode-time rules before changing any state, and shall reject an invalid token with a message. (BR-7, SYS-UC-2)
-| EARS-3 | While a peer connection already exists, if the actor requests a new invite or join, the system shall refuse it with a message. (BR-6, GD-1)
+| EARS-3 | While a bootstrap invite is already open (awaiting its answer), if the host requests another invite, the system shall refuse it with a message. (BR-6, GD-1)
 | EARS-4 | If ICE gathering does not complete within the timeout, the system shall emit the candidates gathered so far. (UC-1 3a)
 | EARS-5 | When applying a remote description, the system shall reject any SDP that does not carry a DTLS fingerprint, and shall not fall back to plaintext. (G-8, SM-7, VR-9)
 | EARS-6 | While a screen share is active, the system shall hide device selection and shall restore the current camera track when sharing stops. (UC-4)
