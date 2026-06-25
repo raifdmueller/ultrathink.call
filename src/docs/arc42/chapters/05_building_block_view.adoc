@@ -3,9 +3,9 @@
 === Level 1 — Whitebox ultrathink.call
 
 The static app decomposes into six building blocks. The external systems are the
-same set as Chapter 3. At R1 every block lives in the single file `index.html`;
-the source locations name the functions, so the seams are real even before the
-file is split (a split is tracked debt — issue #7).
+same set as Chapter 3. Since EPIC 1 (issue #7, done) the blocks live in separate
+ES modules under `src/app/` — `codec.js`, `peer.js`, `signaling.js`, `main.js` —
+loaded natively without a build; the source-location column names each module.
 
 [plantuml,c4-container,svg]
 ----
@@ -46,12 +46,12 @@ Rel(sig, mail, "invite draft", "mailto:")
 [cols="1,2,2,2",options="header"]
 |===
 | Block | Responsibility | Interface | Source location
-| BB-1 UI Shell | Present controls, video tiles, status; wire DOM events to the other blocks. | DOM events; `status()` text. | `index.html` (markup + event listeners)
-| BB-2 Media Manager | Capture camera/mic, enumerate and switch devices, screen share, restore camera. | `getUserMedia`, `enumerateDevices`, `replaceTrack`. | `index.html`: handlers on `#startCam`/`#shareScreen`; functions `populateDevices`, `switchDevices`, `restoreCamera`
-| BB-3 Peer Connection | Own the `RTCPeerConnection`: tracks, offer/answer, ICE (non-trickle, timeout-bounded). | `newPeerConnection`, `waitForIce`. | `index.html`: `newPeerConnection`, `waitForIce`
-| BB-4 Signaling Transport (port) | Produce and consume capability tokens; current adapter = capability-URL + `mailto:` + clipboard. The R2 broker is a second adapter. | publish/await offer & answer. | `index.html`: click handlers on `#createInvite`/`#joinAnswer`/`#loadIncoming`; functions `detectInvite`, `mailto` — see ADR-5, issue #7
-| BB-5 Token Codec | Compress and encode the SDP payload to a URL-safe token and back. | `encodePayload`, `decodePayload`, `extractToken`. | `index.html`: `gzip`/`gunzip`, `b64url*`, `encodePayload`, `decodePayload`
-| BB-6 Validation | Enforce decode-time rules VR-1..6,8,9 and the post-decode guard GD-1. | called inside `decodePayload`; guard in handlers. | `index.html`: `decodePayload`, handler `if (pc)` guards
+| BB-1 UI Shell | Present controls, video tiles, status; wire DOM events to the other blocks. | DOM events; `status()` text. | `index.html` (markup); `src/app/main.js` (event wiring)
+| BB-2 Media Manager | Capture camera/mic, enumerate and switch devices, screen share, restore camera. | `getUserMedia`, `enumerateDevices`, `replaceTrack`. | `src/app/main.js`: `populateDevices`, `switchDevices`, `restoreCamera` + `#startCam`/`#shareScreen` handlers
+| BB-3 Peer Connection | Own the `RTCPeerConnection`: tracks, offer/answer, ICE (non-trickle, timeout-bounded). | `PeerSession` class; `waitForIce`. | `src/app/peer.js`
+| BB-4 Signaling Transport (port) | Produce and consume capability tokens; current adapter = capability-URL + `mailto:` + clipboard. The R2 broker is a second adapter. | `buildCapabilityUrl`, `parseIncoming`, `mailtoLink`, `inviteTokenInHash`. | `src/app/signaling.js` (manual adapter); `src/app/main.js` (DOM glue) — see ADR-5, issue #7
+| BB-5 Token Codec | Compress and encode the SDP payload to a URL-safe token and back. | `encodePayload`, `decodePayload`, `extractToken`. | `src/app/codec.js` (pure, unit-tested)
+| BB-6 Validation | Enforce decode-time rules VR-1..6,8,9 and the post-decode guard GD-1. | validation inside `decodePayload`; guard in handlers. | `src/app/codec.js` (`decodePayload`); `src/app/main.js` (`if (session)` guards)
 |===
 
 === Level 2 — Signaling Transport (port) whitebox

@@ -14,6 +14,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-4 | Topology for the ~20-participant training case | Proposed (open — issue #3)
 | ADR-5 | Ports and adapters for external dependencies | Accepted
 | ADR-6 | Static host: GitHub Pages interim, target Codeberg Pages (DE) | Accepted
+| ADR-7 | ES modules + dev-only test tooling (no app build) | Accepted (inferred)
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -115,10 +116,10 @@ port; adapters form an anti-corruption layer.
 | *Sum* | *0* | *+1*
 |===
 
-*Consequences*: chosen for modifiability and testability; the seam is specified
-now but the extraction is deliberately deferred to R2's Mikado first step
-(*tech-debt*, issue #7) to avoid a speculative abstraction (YAGNI). Creates no
-new tracked risk; the deferred extraction is tracked as TD-1 / issue #7.
+*Consequences*: chosen for modifiability and testability. The seam was pulled
+forward and realized in EPIC 1 (issue #7 done, see ADR-7) rather than deferred to
+R2 — the port + adapters now live in `src/app/` and TD-1 is resolved. Creates no
+new tracked risk.
 
 === ADR-6 Static host: GitHub Pages as interim, not sovereign
 
@@ -149,3 +150,27 @@ host — is left to the decision in issue (host migration).
 *R-11* (high) and technical debt *TD-6*, tracked in issue #10. Development and
 source on GitHub are unaffected (not a runtime endpoint); only the *delivery*
 host is in scope.
+
+=== ADR-7 ES modules + dev-only test tooling (no app build)
+
+*Status*: Accepted (inferred — EPIC 1). *Context*: realizing the ports concept
+(ADR-5) and the test concept (8.3) needs modular, importable code, but the app
+was a single inline-script file (good for CSP, bad for testing). *Decision*:
+split the JavaScript into native ES modules under `src/app/` loaded with
+`<script type="module">` — no bundler, no app build (TC-1 holds) — and add
+*vitest* (unit) and *Playwright* (E2E) as dev-only dependencies that never ship.
+
+[cols="2,1,1",options="header"]
+|===
+| Criterion | Single inline file — datum | ES modules + dev test tooling
+| Unit-testable codec | 0 | +1
+| Swappable adapters (G-6) | 0 | +1
+| Stays build-less, no shipped deps | 0 | 0
+| Inline-script attack surface | 0 | +1
+| *Sum* | *0* | *+3*
+|===
+
+*Consequences*: the inline `<script>` is gone, so CSP tightens to
+`script-src 'self'` — this closes the T-010 gap M-2 previously leaned on M-3 for.
+Dev dependencies are added but never served (the app is still static, no build).
+Creates no new tracked risk.

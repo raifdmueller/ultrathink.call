@@ -2,4 +2,9 @@
 build/
 .gradle/
 
+# node / test tooling (dev-only; the app ships without a build)
+node_modules/
+test-results/
+playwright-report/
+
 # local docToolchain install lives in $HOME/.doctoolchain (not in repo)
