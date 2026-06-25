@@ -3,6 +3,7 @@
 // (ADR-8, no broker). One video tile per peer; device/screen changes apply to all.
 import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
+import { AdaptController, TIERS } from "./adapt.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
@@ -66,16 +67,51 @@ function ensureMesh(isHost) {
     mesh = new MeshSession({
       stream: localStream,
       isHost,
-      onPeerStream: (id, s) => setTile(id, s),
+      onPeerStream: (id, s) => { setTile(id, s); onPeerConnected(id); },
       onPeerLeave: (id) => removeTile(id),
       onStatus: (m) => status(m),
-      onKicked: () => { clearRemoteTiles(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
+      onKicked: () => { clearRemoteTiles(); stopAdapt(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
     });
   }
   return mesh;
 }
 
 const eachPeer = (fn) => { if (mesh) for (const s of mesh.peers.values()) fn(s); };
+
+// --- Adaptive media under load (#27, R4): degrade, do not drop -------------------
+// CPU is shared across all our senders, so one controller drives the whole local
+// encoding. Each tick we ask the browser whether any sender is CPU/bandwidth
+// limited and let the controller decide; on a tier change we re-encode for every
+// peer. The browser does the actual scaling — we only set the lever.
+const adapt = new AdaptController();
+let adaptTimer = null;
+const ADAPT_INTERVAL_MS = 2000;
+
+function startAdapt() { if (!adaptTimer) adaptTimer = setInterval(sampleAdapt, ADAPT_INTERVAL_MS); }
+function stopAdapt() { clearInterval(adaptTimer); adaptTimer = null; }
+
+async function sampleAdapt() {
+  if (!mesh || mesh.peers.size === 0) return;
+  let limited = false;
+  for (const s of mesh.peers.values()) {
+    try {
+      const v = await s.videoLimitation();
+      if (v && (v.reason === "cpu" || v.reason === "bandwidth")) { limited = true; break; }
+    } catch { /* a peer mid-teardown — ignore this sample */ }
+  }
+  const tier = adapt.sample(limited, Date.now());
+  if (tier) {
+    for (const s of mesh.peers.values()) await s.applyVideoParams(tier).catch(() => {});
+    status(`Videoqualität an die Auslastung angepasst (Stufe ${adapt.index + 1}/${TIERS.length}).`);
+  }
+}
+
+// A peer that connects after we have already stepped down must start at the
+// current tier, not full quality.
+async function onPeerConnected(id) {
+  startAdapt();
+  if (adapt.index > 0) await mesh?.peers.get(id)?.applyVideoParams(adapt.tier).catch(() => {});
+}
 
 // --- Step 1: media + device list -------------------------------------------------
 $("startCam").addEventListener("click", async () => {

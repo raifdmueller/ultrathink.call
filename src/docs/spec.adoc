@@ -369,6 +369,14 @@ Scenario: No third-party network egress during a call
 Scenario: No US endpoint in the runtime path
   When the call sets up
   Then every endpoint — STUN, static host, CDN, DNS — is on the non-US allowlist
+
+# SM-3 / QS-3 / EARS-16 — adaptive media: degrade, do not drop (BB-8)
+Scenario: Sustained load steps the encoding down, never below 10 fps
+  Given a running call
+  When any outgoing video is CPU- or bandwidth-limited for a sustained interval
+  Then the local encoding steps down one tier
+  And it never drops below 10 fps
+  And when the limitation clears for a sustained interval it steps back up
 ----
 
 == EARS requirements pin the system's obligations
@@ -391,6 +399,8 @@ Scenario: No US endpoint in the runtime path
 | EARS-13 | When the host kicks a peer, the system shall drop that peer at the host and relay the eviction to the remaining guests, removing it from the mesh. (BR-9, UC-5)
 | EARS-14 | When a guest receives a kick or mute, the system shall act on it only if it arrived from the host session, and otherwise shall ignore it. (BR-9, UC-5)
 | EARS-15 | When the host requests an invite, the system shall stamp a 60-minute expiry; and when loading a token whose expiry has passed, the system shall refuse it with a message and no state change. (BR-10, VR-10)
+| EARS-16 | While a call is running, when the browser reports the outgoing video as CPU- or bandwidth-limited for a sustained interval, the system shall step the local encoding down through fixed tiers, and shall not drop below 10 fps. (SM-3, QS-3, BB-8)
+| EARS-17 | While the encoding is stepped down, when the limitation clears for a sustained interval, the system shall step the encoding back up one tier at a time. (QS-3, BB-8)
 |===
 
 == Entities, states, and contracts complete the picture
@@ -522,6 +532,7 @@ not authorization.
 | VR-9, EARS-5 | PRD goal G-8 (encryption enforced, not assumed)
 | VR-10, EARS-15 | arc42 M-9 invite expiry (R-3 replay window bounded)
 | EARS-13, EARS-14 | arc42 M-8 host moderation (T-009 / R-9)
+| EARS-16, EARS-17 | arc42 BB-8 adaptive media (SM-3, QS-3, G-4/QG-3)
 | EARS-10 | PRD risk R-6 (IP/metadata disclosure — disclosed, mitigation TURN deferred)
 | EARS-11, R-10 acceptance | PRD risk R-10 (supply chain) — CSP shipped; SRI/Trusted Types are later hardening
 | Deferred to arc42 threat model (8.1) | R-3 single-use token revocation (expiry now bounds replay, M-9), R-8 full pre-share UI, SDP content/ICE-candidate constraints
