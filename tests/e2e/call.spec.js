@@ -177,6 +177,12 @@ test("self-mute toggles the local mic and camera (#47)", async ({ browser }) => 
   expect(await enabled("video")).toBe(false);
   await expect(page.locator("#muteCam")).toHaveText("Kamera an");
   await expect(page.locator("#localCamFlag")).toBeVisible();
+
+  // A device switch acquires a fresh track (enabled by default) — the mute must
+  // survive it (#47 re-apply path).
+  await page.evaluate(() => document.getElementById("camSelect").dispatchEvent(new Event("change")));
+  await expect(page.locator("#status")).toHaveText("Gerät gewechselt.", { timeout: 10000 });
+  expect(await enabled("video")).toBe(false);
 });
 
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {

@@ -387,6 +387,7 @@ $("shareScreen").addEventListener("click", async () => {
     for (const s of (mesh ? mesh.peers.values() : [])) await s.replaceVideo(screenTrack);
     sharing = true;
     $("localVideo").srcObject = display;
+    show("localCamFlag", false); // the screen is being sent, not the (off) camera
     $("shareScreen").disabled = true; show("stopShare", true);
     refreshBlurAvailability(); // blur applies to the camera, not the share — disable mid-share
     status("Bildschirm wird geteilt. Achte darauf, nur das gewünschte Fenster freizugeben.");
@@ -403,6 +404,7 @@ async function restoreCamera() {
   $("localVideo").srcObject = localStream;
   $("shareScreen").disabled = false; show("stopShare", false);
   status("Zurück auf Kamera.");
+  applyCam(); // restore the camera-off state + tile flag the share hid (#47)
   // The restored camera frame is unblurred until re-applied; re-assert fail-closed (#25).
   refreshBlurAvailability();
   if (blurOn) {
