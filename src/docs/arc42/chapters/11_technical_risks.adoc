@@ -15,7 +15,7 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 [cols="1,1,1,1,3",options="header"]
 |===
 | ID | Prob. | Impact | Priority | Mitigation (Ch. 8 / Ch. 10)
-| R-11 | High | High | *High* | The delivery host (GitHub Pages) is US-jurisdiction, contradicting G-1/QG-1 — the host serves the executable client code (T-003). ADR-6: migrate to a sovereign EU static host before claiming SM-2; tracked as an `adr-needed` issue.
+| R-11 | High | High | *High* | The delivery host (GitHub Pages) is US-jurisdiction, contradicting G-1/QG-1 — the host serves the executable client code (T-003). ADR-6: accepted interim; migrate to the chosen sovereign target *Codeberg Pages (DE)* before claiming SM-2. Carried as TD-6, issue #10.
 | R-1 | Med | High | *High* | Topology decision deferred to ADR-4 / issue #3; does not block R0–R4. The central tension between G-1/G-2 and 20-peer scale.
 | R-12 | Med | High | *High* | No TURN (TC-7): behind symmetric/CGNAT NAT the call cannot establish (Runtime Scenario 2), directly threatening SM-1 (the round runs with no Zoom fallback). Mitigation: TURN relay deferred (issue #4) — adding it trades against G-2.
 | R-7 | Low | High | *High* | On the signaling path. M-1 (DTLS-fingerprint check, VR-9) + fingerprint exchange over the capability channel (ADR-2); full broker-trust handling at R2.
@@ -40,4 +40,5 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | TD-3 | No automatic reconnect and no `RTCPeerConnection` teardown on failure. Burdens *BB-3 Peer Connection*. | R0-noted limitation
 | TD-4 | A single global `pc` bakes in the one-peer assumption, blocking the mesh. Burdens *BB-3 Peer Connection* (needs a `PeerSession` map). | issue #7
 | TD-5 | No automated tests yet; R0–R1 are tracer slices. Burdens *BB-5 Token Codec* and *BB-6 Validation*. | issue #7 (unblocks the unit layer)
+| TD-6 | Delivery host is GitHub Pages (US) instead of the chosen sovereign target Codeberg Pages (DE). Burdens the Deployment view (Ch. 7) and G-1; migration expected trivial. | issue #10 (ADR-6 / R-11)
 |===

@@ -13,7 +13,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-3 | Sovereign (non-US) STUN; no Google | Accepted
 | ADR-4 | Topology for the ~20-participant training case | Proposed (open — issue #3)
 | ADR-5 | Ports and adapters for external dependencies | Accepted
-| ADR-6 | Static host: GitHub Pages as interim, not sovereign | Accepted (inferred, interim)
+| ADR-6 | Static host: GitHub Pages interim, target Codeberg Pages (DE) | Accepted
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -128,7 +128,9 @@ to be non-US. The project currently deploys to *GitHub Pages* (Microsoft, US),
 which contradicts that goal — surfaced by the ATAM review. *Decision*: accept
 GitHub Pages as an explicit interim while the app is a tracer, and treat the
 move to a sovereign EU static host as required before any sovereignty claim
-(SM-2) is presented as met. The end decision (which host) is the product owner's.
+(SM-2) is presented as met. The product owner chose *Codeberg Pages (DE)* as the
+target; the migration is expected to be trivial and is carried as technical debt
+*TD-6*.
 
 [cols="2,1,1,1",options="header"]
 |===
@@ -144,6 +146,6 @@ top-ranked goal at no zero-ops cost. The cell that needs owner input — the exa
 host — is left to the decision in issue (host migration).
 
 *Consequences*: until migrated, the deployed app violates G-1; recorded as
-*R-11* (high) and tracked as an `adr-needed` issue. Development and source on
-GitHub are unaffected (not a runtime endpoint); only the *delivery* host is in
-scope.
+*R-11* (high) and technical debt *TD-6*, tracked in issue #10. Development and
+source on GitHub are unaffected (not a runtime endpoint); only the *delivery*
+host is in scope.
