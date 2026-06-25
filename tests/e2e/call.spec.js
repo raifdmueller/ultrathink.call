@@ -118,6 +118,20 @@ test("invite offers exactly one of native-share or mailto, plus copy (#42)", asy
   expect(share).not.toBe(mail);
 });
 
+test("without the Web Share API the invite falls back to mailto (#42)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  // Force the non-native branch: hide navigator.share before any script runs.
+  await host.addInitScript(() => Object.defineProperty(navigator, "share", { value: undefined, configurable: true }));
+  await host.goto("/");
+  await host.click("#startCam");
+  await host.click("#createInvite");
+  await expect(host.locator("#inviteUrl")).not.toHaveValue("", { timeout: 15000 });
+
+  await expect(host.locator("#mailInvite")).toBeVisible();    // fallback present
+  await expect(host.locator("#shareInvite")).toBeHidden();    // native share not offered
+  await expect(host.locator("#copyInvite")).toBeVisible();    // copy always
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");

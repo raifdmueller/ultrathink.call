@@ -241,8 +241,8 @@ $("createInvite").addEventListener("click", async () => {
     ensureMesh(true);
     const offer = await mesh.createBootstrapOffer();
     $("inviteUrl").value = await buildCapabilityUrl("offer", roomId, offer, Date.now() + INVITE_TTL_MS);
-    $("copyInvite").disabled = false; $("mailInvite").disabled = false; $("shareInvite").disabled = false;
-    applyShareChannels("shareInvite", "mailInvite");
+    $("copyInvite").disabled = false; $("mailInvite").disabled = false;
+    applyShareChannels("shareInvite", "mailInvite"); // share/mailto controlled by visibility, not disabled
     bootstrapPending = true;
     status("Einladung erstellt. Schick den Link und füge unten die Antwort ein.");
   } catch (err) {
@@ -272,7 +272,7 @@ $("loadIncoming").addEventListener("click", async () => {
       $("createInvite").disabled = false;
       $("inviteUrl").value = ""; $("incomingIn").value = "";
       $("copyInvite").disabled = true; $("mailInvite").disabled = true;
-      $("shareInvite").disabled = true; show("shareInvite", false);
+      show("shareInvite", false);
       status("Teilnehmer verbunden. Lade weitere ein oder bleib einfach im Call — das Mesh verbindet sich selbst.");
     }
   } catch (err) {
@@ -300,7 +300,11 @@ $("joinAnswer").addEventListener("click", async () => {
 
 // --- Distribution: native share / clipboard / mailto -----------------------------
 // Copy works everywhere; native share where the platform has it, else mailto as
-// the desktop fallback (#42). One path is offered, never a dead button.
+// the desktop fallback (#42). One path is offered, never a dead button. The
+// subject/intro live in one place so the share and mailto wordings cannot drift.
+const INVITE_MSG = { subject: "ultrathink.call — Einladung", intro: "Tritt unserem Call bei, indem du diesen Link öffnest:" };
+const ANSWER_MSG = { subject: "ultrathink.call — Antwort", intro: "Meine Antwort auf deine Einladung:" };
+
 function applyShareChannels(shareId, mailId) {
   const native = canNativeShare();
   show(shareId, native);
@@ -313,20 +317,21 @@ $("copyAnswer").addEventListener("click", () => copy("answerUrl"));
 
 // navigator.share rejects with AbortError when the user dismisses the sheet —
 // that is not an error, so swallow it (acceptance: cancel = no state change).
-async function shareLink(subject, intro, urlId) {
+// `err` is not guaranteed to be an Error, so reach into it defensively.
+async function shareLink({ subject, intro }, urlId) {
   try {
     await navigator.share(shareData(subject, intro, $(urlId).value));
   } catch (err) {
-    if (err.name !== "AbortError") status("Teilen fehlgeschlagen: " + err.message);
+    if (err?.name !== "AbortError") status("Teilen fehlgeschlagen: " + (err?.message ?? err));
   }
 }
-$("shareInvite").addEventListener("click", () => shareLink("ultrathink.call — Einladung", "Tritt unserem Call bei, indem du diesen Link öffnest:", "inviteUrl"));
-$("shareAnswer").addEventListener("click", () => shareLink("ultrathink.call — Antwort", "Meine Antwort auf deine Einladung:", "answerUrl"));
+$("shareInvite").addEventListener("click", () => shareLink(INVITE_MSG, "inviteUrl"));
+$("shareAnswer").addEventListener("click", () => shareLink(ANSWER_MSG, "answerUrl"));
 $("mailInvite").addEventListener("click", () => {
-  location.href = mailtoLink("ultrathink.call — Einladung", "Tritt unserem Call bei, indem du diesen Link öffnest:", $("inviteUrl").value);
+  location.href = mailtoLink(INVITE_MSG.subject, INVITE_MSG.intro, $("inviteUrl").value);
 });
 $("mailAnswer").addEventListener("click", () => {
-  location.href = mailtoLink("ultrathink.call — Antwort", "Meine Antwort auf deine Einladung:", $("answerUrl").value);
+  location.href = mailtoLink(ANSWER_MSG.subject, ANSWER_MSG.intro, $("answerUrl").value);
 });
 
 // --- Screen sharing (applies to every peer) --------------------------------------
