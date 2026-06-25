@@ -58,6 +58,18 @@ describe("AdaptController (#27)", () => {
     expect(tier).toEqual(TIERS[0]);
   });
 
+  it("reset() returns to full quality with no streak, so the next call starts fresh", () => {
+    const c = new AdaptController(opts);
+    c.sample(true, 0); c.sample(true, 6000); c.sample(true, 12000); // down to tier 2
+    expect(c.index).toBe(2);
+    c.reset();
+    expect(c.index).toBe(0);
+    expect(c.tier).toEqual(TIERS[0]);
+    // a single post-reset pressure sample must not immediately step down (streak cleared)
+    expect(c.sample(true, 13000)).toBeNull();
+    expect(c.index).toBe(0);
+  });
+
   it("resets the streak when pressure flips, so a blip does not step down", () => {
     const c = new AdaptController(opts);
     c.sample(true, 0);

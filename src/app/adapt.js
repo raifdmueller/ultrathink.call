@@ -18,6 +18,7 @@ export const TIERS = [
 
 export const DOWN_AFTER_MS = 6000;  // sustained pressure before stepping down
 export const UP_AFTER_MS = 30000;   // sustained calm before stepping back up (slower up than down)
+export const SAMPLE_INTERVAL_MS = 2000; // how often the integration samples load
 
 export class AdaptController {
   constructor({ tiers = TIERS, downAfterMs = DOWN_AFTER_MS, upAfterMs = UP_AFTER_MS } = {}) {
@@ -31,6 +32,10 @@ export class AdaptController {
 
   get tier() { return this.tiers[this.index]; }
   get atFloor() { return this.index === this.tiers.length - 1; }
+
+  // Back to full quality with no streak history — called when a call ends, so the
+  // next call does not inherit a degraded tier from the last one.
+  reset() { this.index = 0; this._limited = null; this._since = null; }
 
   // Feed one observation (`limited` = the browser reported a CPU/bandwidth limit).
   // Returns the new tier when this sample crossed a threshold and changed it, else

@@ -3,7 +3,7 @@
 // (ADR-8, no broker). One video tile per peer; device/screen changes apply to all.
 import { MeshSession } from "./mesh.js";
 import { buildCapabilityUrl, parseIncoming, mailtoLink, inviteTokenInHash, isExpired } from "./signaling.js";
-import { AdaptController, TIERS } from "./adapt.js";
+import { AdaptController, TIERS, SAMPLE_INTERVAL_MS } from "./adapt.js";
 
 const INVITE_TTL_MS = 60 * 60 * 1000; // an invite link is valid for one hour (#29)
 const EXPIRED_MSG = "Diese Einladung ist abgelaufen — bitte den Host um einen neuen Link.";
@@ -64,13 +64,14 @@ function clearRemoteTiles() {
 
 function ensureMesh(isHost) {
   if (!mesh) {
+    adapt.reset(); // a fresh call starts at full quality, never a prior call's tier
     mesh = new MeshSession({
       stream: localStream,
       isHost,
       onPeerStream: (id, s) => { setTile(id, s); onPeerConnected(id); },
-      onPeerLeave: (id) => removeTile(id),
+      onPeerLeave: (id) => { removeTile(id); if (!mesh || mesh.peers.size === 0) endAdapt(); },
       onStatus: (m) => status(m),
-      onKicked: () => { clearRemoteTiles(); stopAdapt(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
+      onKicked: () => { clearRemoteTiles(); endAdapt(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
     });
   }
   return mesh;
@@ -85,10 +86,12 @@ const eachPeer = (fn) => { if (mesh) for (const s of mesh.peers.values()) fn(s);
 // peer. The browser does the actual scaling — we only set the lever.
 const adapt = new AdaptController();
 let adaptTimer = null;
-const ADAPT_INTERVAL_MS = 2000;
 
-function startAdapt() { if (!adaptTimer) adaptTimer = setInterval(sampleAdapt, ADAPT_INTERVAL_MS); }
-function stopAdapt() { clearInterval(adaptTimer); adaptTimer = null; }
+function startAdapt() { if (!adaptTimer) adaptTimer = setInterval(sampleAdapt, SAMPLE_INTERVAL_MS); }
+// Stop sampling AND reset the controller — the call is over, so the next one must
+// start from full quality with no leftover streak (else a late joiner inherits a
+// dead tier and the timer ticks on forever).
+function endAdapt() { clearInterval(adaptTimer); adaptTimer = null; adapt.reset(); }
 
 async function sampleAdapt() {
   if (!mesh || mesh.peers.size === 0) return;

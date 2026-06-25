@@ -114,8 +114,9 @@ export class PeerSession {
     let reason = "none", fps = null;
     stats.forEach((r) => {
       if (r.type === "outbound-rtp" && r.kind === "video") {
-        if (r.qualityLimitationReason) reason = r.qualityLimitationReason;
-        if (typeof r.framesPerSecond === "number") fps = r.framesPerSecond;
+        // Prefer a limiting verdict; under simulcast keep the worst, not the last.
+        if (r.qualityLimitationReason && r.qualityLimitationReason !== "none") reason = r.qualityLimitationReason;
+        if (typeof r.framesPerSecond === "number") fps = fps === null ? r.framesPerSecond : Math.min(fps, r.framesPerSecond);
       }
     });
     return { reason, fps };
