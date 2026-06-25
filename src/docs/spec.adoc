@@ -56,7 +56,7 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 | BR-11 | Background blur is offered only where the platform can deliver it natively (ADR-9); the System never reports blur active unless the platform confirmed it. On any failure it reverts the toggle and warns, so an unblurred frame is never presented as blurred (fail-closed). No segmentation model is fetched, so the CSP and sovereignty (G-1) are unchanged.
 |===
 
-== Seven use cases cover hosting, joining, devices, sharing, moderation, blur, and self-mute
+== Eight use cases cover hosting, joining, devices, sharing, moderation, blur, self-mute, and chat
 
 === UC-1 Host a call
 
@@ -192,6 +192,23 @@ per peer. The ~20 training topology (D-5/R5) extends this via asymmetric broadca
 
 NOTE: This is *self*-mute (sender-side, `track.enabled`), distinct from host moderation (UC-5 / #28), which disables a *remote* peer's audio for everyone (receiver-side).
 
+=== UC-8 Chat
+
+* *Primary actor*: Host or Guest
+* *Goal*: Send a short text message to everyone in the call.
+* *Trigger*: The actor types a message and sends it.
+* *Preconditions*: A connected call (at least one peer).
+* *Postconditions*: Every connected peer sees the message attributed to the sender.
+
+.Main success scenario
+. Actor types a line and presses Senden/Enter.
+. System broadcasts it over each peer's `ctrl` data channel — direct P2P across the mesh, no relay (→ SYS-UC-7).
+. Each peer renders it as *text* (never HTML, BR-8), attributed by the channel it arrived on (sender label `Host`/`Gast n`); the sender echoes it locally as "Du".
+
+.Extensions
+* 2a. No peer is connected yet → nothing is sent; the message is not lost from the input until a send succeeds.
+* 3a. An incoming line exceeds the cap, or is malformed → it is dropped, not rendered (T-008/T-010 discipline).
+
 == Each interface has a system use case
 
 === SYS-UC-1 Produce an invite token
@@ -237,7 +254,12 @@ NOTE: This is *self*-mute (sender-side, `track.enabled`), distinct from host mod
 * *Output / status*: the peer is dropped for all peers (kick) or its audio is silenced for all peers (mute); the tile/control updates.
 * *Error responses*: a non-Host caller is a no-op; a `kick`/`mute` not from the Host session is ignored (BR-9).
 
-== The connect flow has more failure paths than the happy path
+=== SYS-UC-7 Chat over the data channel (#48)
+
+* *Input*: a text line; the established mesh (peers with open `ctrl` channels).
+* *Processing*: cap the text (MAX_CHAT); send `{t:"chat", text}` over every peer's `ctrl` channel — direct P2P, no host relay. On receipt, validate (`text` is a string within the cap) and attribute to `session._peerId` (the channel it arrived on), never a claimed `from`.
+* *Output*: each peer renders the line as a text node (BR-8 — never HTML); the sender echoes locally.
+* *Error responses*: oversized/malformed → dropped; the whole `ctrl` frame is also size-capped (MAX_CTRL) and JSON-guarded (reuses T-008/T-010 defences).
 
 === End-to-end connect flow (with error paths)
 
@@ -446,6 +468,8 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-22 | While a connection is pending (created but no peer connected), if the user attempts to leave or reload the page, the system shall warn before unload. (ADR-8, #46)
 | EARS-23 | The system shall present the answer as a copy/paste token, not an openable link; and when opened with an `#answer=` URL, shall show a guard instructing the user to paste it into the original call tab, never attempting a join. (#46)
 | EARS-24 | When the actor self-mutes the microphone or camera, the system shall set the local track's `enabled` to false without renegotiation, indicate the muted state on the local tile, and re-apply it after a device switch. (UC-7, #47)
+| EARS-25 | When a participant sends a chat line, the system shall broadcast it over each connected peer's data channel, and shall render every received line as text — never HTML — attributed to the channel it arrived on. (UC-8, SYS-UC-7, BR-8, #48)
+| EARS-26 | When a received chat line exceeds the cap or is malformed, the system shall drop it without rendering. (SYS-UC-7, #48)
 |===
 
 == Entities, states, and contracts complete the picture

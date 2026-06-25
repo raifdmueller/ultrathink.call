@@ -26,6 +26,8 @@ const show = (el, yes) => $(el).classList.toggle("hidden", !yes);
 const STEPS = { start: "stepStart", invite: "stepInvite", answer: "stepAnswer", guard: "answerGuard" };
 function showStep(name) { for (const [k, id] of Object.entries(STEPS)) show(id, k === name); }
 
+const peerLabel = (id) => (id === "host" ? "Host" : "Gast " + id.replace(/^p/, ""));
+
 let mesh = null;
 let localStream = null;
 let camTrack = null;
@@ -78,7 +80,7 @@ function setTile(peerId, stream) {
     const v = document.createElement("video");
     v.autoplay = true; v.playsInline = true;
     const label = document.createElement("span");
-    label.textContent = peerId === "host" ? "Host" : "Gast " + peerId.replace(/^p/, "");
+    label.textContent = peerLabel(peerId);
     tile.append(v, label);
     if (mesh?.isHost && peerId !== "host") tile.append(moderationControls(peerId));
     $("videos").appendChild(tile);
@@ -101,6 +103,7 @@ function ensureMesh(isHost) {
       onPeerLeave: (id) => { removeTile(id); if (!mesh || mesh.peers.size === 0) endAdapt(); },
       onStatus: (m) => status(m),
       onKicked: () => { clearRemoteTiles(); endAdapt(); disarmUnloadGuard(); mesh = null; status("Du wurdest vom Host aus dem Call entfernt."); },
+      onChat: (fromId, text) => appendChat(peerLabel(fromId), text),
     });
   }
   return mesh;
@@ -143,7 +146,7 @@ async function startMedia() {
     localStream = await getMedia({ video: true, audio: true });
     $("localVideo").srcObject = localStream;
     camTrack = localStream.getVideoTracks()[0] || null;
-    show("videos", true); show("callControls", true);
+    show("videos", true); show("callControls", true); show("chatPanel", true);
     // Screen sharing exists only in desktop browsers (not iOS/Android) — #34.
     $("shareScreen").disabled = !navigator.mediaDevices?.getDisplayMedia;
     if (!navigator.mediaDevices?.getDisplayMedia) $("shareScreen").title = "Auf diesem Browser/Gerät nicht verfügbar (z. B. mobil).";
@@ -256,6 +259,27 @@ function applyCam() {
 }
 $("muteMic").addEventListener("click", () => { micMuted = !micMuted; applyMic(); status(micMuted ? "Mikro aus." : "Mikro an."); });
 $("muteCam").addEventListener("click", () => { camOff = !camOff; applyCam(); status(camOff ? "Kamera aus." : "Kamera an."); });
+
+// --- In-call chat (#48): direct over the data channel -----------------------------
+// Rendered as a text node, never HTML — an incoming line is untrusted data (BR-8).
+function appendChat(who, text) {
+  const line = document.createElement("div");
+  line.className = "chatline";
+  const name = document.createElement("strong");
+  name.textContent = who + ": ";
+  line.append(name, document.createTextNode(text));
+  $("chatLog").append(line);
+  $("chatLog").scrollTop = $("chatLog").scrollHeight;
+}
+function sendChat() {
+  const text = $("chatInput").value.trim();
+  if (!text || !mesh) return;
+  mesh.sendChat(text);     // broadcast to every connected peer
+  appendChat("Du", text);  // echo locally
+  $("chatInput").value = "";
+}
+$("chatSend").addEventListener("click", sendChat);
+$("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 
 // --- The handshake: create an invite, ingest an invite/answer ---------------------
 // Returns true once an invite exists, false on refusal/failure — so callers only

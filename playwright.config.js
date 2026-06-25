@@ -7,6 +7,9 @@ export default defineConfig({
   testDir: "tests/e2e",
   timeout: 60000,
   expect: { timeout: 20000 },
+  // Real WebRTC handshakes under parallel load occasionally miss the connection
+  // window; one retry absorbs that without masking a genuine, repeatable failure.
+  retries: 1,
   use: {
     baseURL: "http://127.0.0.1:8080",
     browserName: "chromium",

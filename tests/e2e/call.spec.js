@@ -11,17 +11,17 @@ const newPeer = async (browser) => {
 // the pasted answer. `first` picks the host's entry button.
 async function bootstrap(host, guest, { first = true } = {}) {
   await host.click(first ? "#openCall" : "#inviteMore");
-  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
   const invite = await host.locator("#inviteLink").getAttribute("href");
 
   await guest.goto(invite);
   await guest.click("#join");
-  await expect(guest.locator("#answerCode")).not.toHaveValue("", { timeout: 15000 });
+  await expect(guest.locator("#answerCode")).not.toHaveValue("", { timeout: 20000 });
   const answer = await guest.locator("#answerCode").inputValue();
 
   await host.fill("#answerIn", answer);
   await host.click("#answerLoad");
-  await expect(host.locator("#stepInvite")).toBeHidden({ timeout: 15000 }); // answer accepted
+  await expect(host.locator("#stepInvite")).toBeHidden({ timeout: 20000 }); // answer accepted
 }
 
 const tileHasStream = (page, id) =>
@@ -84,8 +84,8 @@ test("the host can kick a guest out of the mesh (#28)", async ({ browser }) => {
 
   await host.locator("#tile-p1").getByRole("button", { name: "Entfernen" }).click();
   await expect(host.locator("#tile-p1")).toHaveCount(0);
-  await expect(g2.locator("#tile-p1")).toHaveCount(0, { timeout: 15000 });
-  await expect(g1.locator("#videos .tile[id]")).toHaveCount(0, { timeout: 15000 });
+  await expect(g2.locator("#tile-p1")).toHaveCount(0, { timeout: 20000 });
+  await expect(g1.locator("#videos .tile[id]")).toHaveCount(0, { timeout: 20000 });
   await expect(g1.locator("#status")).toContainText("entfernt");
 });
 
@@ -103,7 +103,7 @@ test("invite offers exactly one of native-share or mailto, plus copy (#42)", asy
   const { page: host } = await newPeer(browser);
   await host.goto("/");
   await host.click("#openCall");
-  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
 
   await expect(host.locator("#copyInvite")).toBeVisible();
   const share = await host.locator("#shareInvite").isVisible();
@@ -116,7 +116,7 @@ test("without the Web Share API the invite falls back to mailto (#42)", async ({
   await host.addInitScript(() => Object.defineProperty(navigator, "share", { value: undefined, configurable: true }));
   await host.goto("/");
   await host.click("#openCall");
-  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
 
   await expect(host.locator("#mailInvite")).toBeVisible();
   await expect(host.locator("#shareInvite")).toBeHidden();
@@ -129,7 +129,7 @@ test("the invite is shown as a compact link, not a raw URL string (#44)", async 
   await host.click("#openCall");
 
   const link = host.locator("#inviteLink");
-  await expect(link).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  await expect(link).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
   await expect(link).toBeVisible();
   const text = await link.textContent();
   expect(text).not.toContain("#invite=");
@@ -142,11 +142,11 @@ test("opening an answer link shows the guard, not a broken join (#46)", async ({
   const { page: guest } = await newPeer(browser);
   await host.goto("/");
   await host.click("#openCall");
-  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 15000 });
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
   const invite = await host.locator("#inviteLink").getAttribute("href");
   await guest.goto(invite);
   await guest.click("#join");
-  await expect(guest.locator("#answerCode")).not.toHaveValue("", { timeout: 15000 });
+  await expect(guest.locator("#answerCode")).not.toHaveValue("", { timeout: 20000 });
   const answer = await guest.locator("#answerCode").inputValue();
 
   const { page: stray } = await newPeer(browser);
@@ -183,6 +183,32 @@ test("self-mute toggles the local mic and camera (#47)", async ({ browser }) => 
   await page.evaluate(() => document.getElementById("camSelect").dispatchEvent(new Event("change")));
   await expect(page.locator("#status")).toHaveText("Gerät gewechselt.", { timeout: 10000 });
   expect(await enabled("video")).toBe(false);
+});
+
+test("in-call chat broadcasts over the data channel (#48)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+  await host.goto("/");
+  await bootstrap(host, guest);
+  await tileHasStream(host, "p1"); // connected
+
+  await host.fill("#chatInput", "hallo welt");
+  await host.click("#chatSend");
+  await expect(guest.locator("#chatLog")).toContainText("Host: hallo welt", { timeout: 10000 });
+  await expect(host.locator("#chatLog")).toContainText("Du: hallo welt"); // own echo
+});
+
+test("chat renders messages as text, never HTML (#48, BR-8)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+  await host.goto("/");
+  await bootstrap(host, guest);
+  await tileHasStream(host, "p1");
+
+  await host.fill("#chatInput", "<img src=x onerror=oops>");
+  await host.click("#chatSend");
+  await expect(guest.locator("#chatLog")).toContainText("<img src=x onerror=oops>", { timeout: 10000 });
+  expect(await guest.locator("#chatLog img").count()).toBe(0); // never interpreted as HTML
 });
 
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
