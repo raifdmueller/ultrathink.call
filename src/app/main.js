@@ -328,8 +328,7 @@ async function ingestIncoming(text) {
       if (!mesh || !mesh.isHost || !bootstrapPending) { status("Keine offene Einladung für diese Antwort."); return; }
       await mesh.acceptBootstrapAnswer(payload.sdp);
       bootstrapPending = false;
-      clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false);
-      showStep("none");
+      clearInviteUI();
       status("Teilnehmer verbunden. Über „Weitere einladen“ kannst du weitere Personen hinzufügen.");
     }
   } catch (err) {
@@ -419,8 +418,8 @@ $("inviteMore").addEventListener("click", () => createInvite());
 $("leaveCall").addEventListener("click", () => {
   stopSharing(); disarmUnloadGuard(); answerChannel?.close(); answerChannel = null;
   mesh?.leave(); // announce the leave so peers drop us at once (#54)
-  // Give the `bye` a moment to flush over the data channel before tearing the
-  // connections down, then reset by reloading.
+  // Give the buffered `bye` a moment to drain over the data channel before tearing
+  // the connections down (best-effort), then reset by reloading.
   setTimeout(() => { mesh?.close(); mesh = null; location.reload(); }, 200);
 });
 
@@ -430,8 +429,7 @@ $("cancelInvite").addEventListener("click", () => {
   if (!mesh) return;
   mesh.cancelPendingInvite();
   bootstrapPending = false;
-  clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false);
-  showStep("none");
+  clearInviteUI();
   status("Einladung verworfen. Über „Weitere einladen“ kannst du eine neue erstellen.");
 });
 
@@ -445,6 +443,8 @@ function applyShareChannels(shareId, mailId) {
 // The invite is shown as a compact link (#44): short text, full URL in href.
 function setLink(id, url, label) { const a = $(id); a.href = url; a.textContent = label + " ↗"; show(id, true); }
 function clearLink(id) { const a = $(id); a.removeAttribute("href"); a.textContent = ""; show(id, false); }
+// Reset the invite step's UI — shared by a successful answer and a discarded invite.
+function clearInviteUI() { clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false); showStep("none"); }
 const linkUrl = (id) => $(id).getAttribute("href") || "";
 
 const copyText = (text) => navigator.clipboard.writeText(text).then(() => status("In die Zwischenablage kopiert."));
