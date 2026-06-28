@@ -102,7 +102,8 @@ Decided by ADR-1/ADR-2: with no backend, recovery is local and bounded.
 * *Fail-closed media* — a remote description without DTLS is rejected before `setRemoteDescription` (M-1); background blur (BB-9, ADR-9) is native, so there is no model to fail to load — the adapted fail-closed rule is that the blur toggle never reports active unless the platform confirmed it, and reverts with a warning on failure, so an unblurred frame is never presented as blurred. A future vendored-model adapter (#26) would reinstate the stricter "no raw frame on model-load failure" rule.
 * *Graceful fallback* — device-switch failure keeps the previous track; an invalid token yields a message and no state change (BR-7).
 * *Reported failure* — `connectionState = failed` is surfaced with a NAT/TURN hint rather than swallowed (R-12).
-* *Not yet* — automatic reconnect and peer teardown are tracked debt (Chapter 11); R0 already flagged "no reconnect".
+* *Graceful leave* — *Verlassen* broadcasts a `bye` over each `ctrl` channel (#54), so peers drop the leaver at once instead of after the ~16 s failure window; an abrupt tab close still relies on that window.
+* *Not yet* — automatic reconnect and peer teardown on *failure* are tracked debt (Chapter 11, TD-3); R0 already flagged "no reconnect".
 
 === Modularity and Ports (cross-cutting)
 

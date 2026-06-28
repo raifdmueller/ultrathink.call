@@ -485,6 +485,8 @@ Scenario: Sustained load steps the encoding down, never below 10 fps
 | EARS-27 | The host shall keep an authoritative set of muted peers, replay it to a joining guest, and re-assert it on each fresh track, so a peer muted before a link exists is still silenced; the host UI shall derive its mute label from that set. (UC-5, #37)
 | EARS-28 | When the user copies the invite, the system shall write a rich link (`text/html` anchor plus a `text/plain` URL fallback) where the Clipboard API supports it, and a plain-text URL otherwise. (SYS-UC-5, #60)
 | EARS-29 | When an `#answer=` link is opened, the system shall hand the answer to an open call tab on the same origin via `BroadcastChannel` and apply it there (validated); if no call tab acknowledges within a short window, it shall fall back to the manual answer guard, never attempting a join in the opened tab. (SYS-UC-3, #65, #46)
+| EARS-30 | When a participant leaves the call, the system shall announce the leave over each connected peer's `ctrl` channel so peers drop the participant immediately, rather than waiting for the connection-failure timeout. (#54)
+| EARS-31 | While a host invite is pending and unanswered, if the host discards it, the system shall close the pending session, clear the invite, and allow a fresh invite to be created. (#55)
 |===
 
 == Entities, states, and contracts complete the picture

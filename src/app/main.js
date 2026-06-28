@@ -416,7 +416,24 @@ $("join").addEventListener("click", async () => {
 $("pasteLoad").addEventListener("click", () => ingestIncoming($("pasteIn").value));
 $("answerLoad").addEventListener("click", () => ingestIncoming($("answerIn").value));
 $("inviteMore").addEventListener("click", () => createInvite());
-$("leaveCall").addEventListener("click", () => { stopSharing(); disarmUnloadGuard(); answerChannel?.close(); answerChannel = null; mesh?.close(); mesh = null; location.reload(); });
+$("leaveCall").addEventListener("click", () => {
+  stopSharing(); disarmUnloadGuard(); answerChannel?.close(); answerChannel = null;
+  mesh?.leave(); // announce the leave so peers drop us at once (#54)
+  // Give the `bye` a moment to flush over the data channel before tearing the
+  // connections down, then reset by reloading.
+  setTimeout(() => { mesh?.close(); mesh = null; location.reload(); }, 200);
+});
+
+// Host abandons an unanswered invite (#55): drop the pending session, clear the
+// invite UI, and allow a fresh invite — the host is no longer stuck.
+$("cancelInvite").addEventListener("click", () => {
+  if (!mesh) return;
+  mesh.cancelPendingInvite();
+  bootstrapPending = false;
+  clearLink("inviteLink"); $("answerIn").value = ""; show("shareInvite", false);
+  showStep("none");
+  status("Einladung verworfen. Über „Weitere einladen“ kannst du eine neue erstellen.");
+});
 
 // --- Distribution: native share / clipboard / mailto (#42) -----------------------
 function applyShareChannels(shareId, mailId) {

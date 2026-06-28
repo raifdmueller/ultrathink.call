@@ -333,6 +333,33 @@ test("being kicked while sharing tears the screen share down (#67)", async ({ br
   await expect(host.locator("#sharedScreen")).toBeHidden({ timeout: 20000 });
 });
 
+test("a guest leaving is signalled, dropping its tile promptly (#54)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  const { page: guest } = await newPeer(browser);
+  await host.goto("/");
+  await bootstrap(host, guest);
+  await tileHasStream(host, "p1");
+
+  await guest.click("#leaveCall");
+  // The `bye` drops the tile in well under the ~16s connection-failure window.
+  await expect(host.locator("#tile-p1")).toHaveCount(0, { timeout: 8000 });
+});
+
+test("a host can discard an unanswered invite and create a fresh one (#55)", async ({ browser }) => {
+  const { page: host } = await newPeer(browser);
+  await host.goto("/");
+  await host.click("#openCall");
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
+
+  await host.click("#cancelInvite");
+  await expect(host.locator("#inviteLink")).toBeHidden();
+
+  // No "already pending" refusal — a fresh invite can be created.
+  await host.click("#inviteMore");
+  await expect(host.locator("#inviteLink")).toHaveAttribute("href", /#invite=/, { timeout: 20000 });
+  await expect(host.locator("#status")).not.toContainText("bereits eine Einladung");
+});
+
 test("an invalid pasted token is rejected with no state change", async ({ browser }) => {
   const { page } = await newPeer(browser);
   await page.goto("/");

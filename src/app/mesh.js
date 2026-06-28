@@ -154,6 +154,22 @@ export class MeshSession {
 
   isMuted(id) { return this._mutedIds.has(id); } // host UI derives the label from this (#37)
 
+  // Host: abandon an invite that was never answered (#55), so the host is not
+  // stuck — `bootstrapPending` is cleared by the caller and a fresh invite allowed.
+  cancelPendingInvite() {
+    if (!this._pendingHostSession) return false;
+    this._pendingHostSession.close();
+    this._pendingHostSession = null;
+    return true;
+  }
+
+  // Tell every connected peer we are leaving (#54), so they drop our tile at once
+  // rather than after the ~16 s connection-failure window. Best-effort: callers
+  // give the message a moment to flush before closing the connections.
+  leave() {
+    for (const s of this.peers.values()) s.sendCtrl({ t: "bye" });
+  }
+
   // --- Screen share (#67): send a screen track into every peer's reserved slot ---
   // Media goes direct P2P over the second video transceiver (no renegotiation, no
   // relay); a tiny `share` ctrl tells each peer to show or hide our screen.
@@ -190,6 +206,14 @@ export class MeshSession {
     // on (session._peerId) — a peer cannot claim another peer is sharing.
     if (msg.t === "share") {
       this.onScreenShare(session._peerId || "peer", !!msg.on);
+      return;
+    }
+
+    // Graceful leave (#54), both roles. The peer announced it is going; drop it
+    // now instead of waiting ~16 s for connectionState to reach "failed". Bound to
+    // the channel it arrived on, so a peer can only say goodbye for itself.
+    if (msg.t === "bye") {
+      this._drop(session._peerId);
       return;
     }
 
