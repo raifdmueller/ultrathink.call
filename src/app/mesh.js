@@ -20,7 +20,7 @@ function validRemoteSdp(sdp, kind) {
 }
 
 export class MeshSession {
-  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, onKicked, onChat, iceConfig }) {
+  constructor({ stream, isHost, onPeerStream, onPeerLeave, onStatus, onKicked, onChat, onScreenStream, onScreenShare, iceConfig }) {
     this.stream = stream;
     this.isHost = isHost;
     this.iceConfig = iceConfig;
@@ -29,6 +29,9 @@ export class MeshSession {
     this.onStatus = onStatus || (() => {});
     this.onKicked = onKicked || (() => {}); // guest: the host evicted us
     this.onChat = onChat || (() => {});     // a chat line arrived (#48)
+    this.onScreenStream = onScreenStream || (() => {}); // a peer's screen track arrived (#67)
+    this.onScreenShare = onScreenShare || (() => {});   // a peer started/stopped sharing (#67)
+    this._screenTrack = null;               // our outgoing screen track while sharing (#67)
     this._mutedIds = new Set();             // authoritative muted-peer set (#37)
     this.selfId = isHost ? "host" : null;
     this.peers = new Map();           // peerId -> PeerSession
@@ -47,6 +50,7 @@ export class MeshSession {
       // existed (or before its stream arrived) must come in silenced — and one
       // unmuted in that window must come in audible. Idempotent in both directions.
       onTrack: (s) => { session.setRemoteAudioEnabled(!this._mutedIds.has(session._peerId)); this.onPeerStream(session._peerId, s); },
+      onScreenTrack: (s) => this.onScreenStream(session._peerId, s), // (#67)
       onState: (st) => {
         this.onStatus(`${session._peerId || "peer"}: ${st}`);
         // "disconnected" is transient and recovers on its own — only tear down on terminal states.
@@ -55,7 +59,18 @@ export class MeshSession {
       onCtrl: (msg) => this._handleCtrl(session, msg),
       ...extra,
     });
+    this._pushScreenIfSharing(session); // a peer joining mid-share gets the screen (#67)
     return session;
+  }
+
+  // Push our active screen into a session's slot and announce it (#67). On an
+  // offerer session the slot exists now; on an answerer session screenSender only
+  // exists after createAnswer, so this is called again there (no-op before that).
+  _pushScreenIfSharing(session) {
+    if (this._screenTrack && session.screenSender) {
+      session.replaceScreen(this._screenTrack).catch(() => {});
+      session.sendCtrl({ t: "share", on: true });
+    }
   }
 
   _atCapacity() { return this.peers.size >= MAX_PEERS; }
@@ -117,6 +132,7 @@ export class MeshSession {
     session._peerId = fromId;
     this.peers.set(fromId, session);
     const answer = await session.createAnswer(offer);
+    this._pushScreenIfSharing(session); // screenSender now exists on this answerer session (#67)
     this._hostSession.sendCtrl({ t: "signal", to: fromId, from: this.selfId, kind: "answer", sdp: answer });
   }
 
@@ -138,6 +154,17 @@ export class MeshSession {
 
   isMuted(id) { return this._mutedIds.has(id); } // host UI derives the label from this (#37)
 
+  // --- Screen share (#67): send a screen track into every peer's reserved slot ---
+  // Media goes direct P2P over the second video transceiver (no renegotiation, no
+  // relay); a tiny `share` ctrl tells each peer to show or hide our screen.
+  setSharing(on, track) {
+    this._screenTrack = on ? track : null;
+    for (const s of this.peers.values()) {
+      s.replaceScreen(this._screenTrack).catch(() => {});
+      s.sendCtrl({ t: "share", on: !!on });
+    }
+  }
+
   // --- Chat (#48): direct peer-to-peer over the established mesh, no relay ----
   // Broadcast to every directly-connected peer. Returns the capped text the
   // sender displays for itself.
@@ -156,6 +183,13 @@ export class MeshSession {
       if (typeof msg.text === "string" && msg.text.length <= MAX_CHAT) {
         this.onChat(session._peerId || "peer", msg.text);
       }
+      return;
+    }
+
+    // Screen-share toggle (#67), both roles. Attributed to the channel it arrived
+    // on (session._peerId) — a peer cannot claim another peer is sharing.
+    if (msg.t === "share") {
+      this.onScreenShare(session._peerId || "peer", !!msg.on);
       return;
     }
 
@@ -204,5 +238,6 @@ export class MeshSession {
   close() {
     for (const s of this.peers.values()) s.close();
     this.peers.clear();
+    this._screenTrack = null; // don't re-share a stale track if this mesh were reused
   }
 }

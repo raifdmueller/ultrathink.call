@@ -32,6 +32,10 @@
       background: rgba(0,0,0,.6); font-size: .75rem; }
     .tile .muteflag { left: auto; right: 6px; bottom: 6px; background: rgba(180,40,40,.85); }
     .tile .camflag { left: 6px; top: 6px; bottom: auto; background: rgba(180,40,40,.85); }
+    .sharedscreen { position: relative; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 1rem; }
+    .sharedscreen video { width: 100%; max-height: 70vh; object-fit: contain; display: block; }
+    .sharedscreen span { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(0,0,0,.6); font-size: .75rem; }
     .modctl { position: absolute; top: 6px; right: 6px; display: flex; gap: .25rem; }
     .modctl button { padding: 2px 6px; font-size: .68rem; background: rgba(20,22,26,.85); }
     section.card { border: 1px solid #2b313a; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; background: #181b20; }
@@ -86,6 +90,12 @@
       <span class="camflag hidden" id="localCamFlag">Kamera aus</span>
     </div>
     <!-- one tile per remote peer is injected here -->
+  </div>
+
+  <!-- A shared screen is shown large, below the camera row (#67) ----------------->
+  <div class="sharedscreen hidden" id="sharedScreen">
+    <video id="screenVideo" autoplay playsinline muted></video>
+    <span id="screenLabel"></span>
   </div>
 
   <div id="status">Bereit.</div>

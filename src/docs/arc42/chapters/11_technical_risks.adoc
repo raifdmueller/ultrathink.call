@@ -43,4 +43,5 @@ split reproducible (e.g. it separates R-7 from R-10 at equal Low/High inputs).
 | TD-4 | *Resolved (EPIC 1):* a `PeerSession` class (`src/app/peer.js`) replaces the global `pc`; the R2 mesh becomes a map of sessions, not a rewrite. | issue #7 (done)
 | TD-5 | *Partly resolved (EPIC 1):* unit tests (codec/VR) and a Playwright E2E exist and run in CI; the integration layer follows with the R2 broker adapter. Burdens *BB-5*/*BB-6*. | issue #20
 | TD-6 | Delivery host is GitHub Pages (US) instead of the chosen sovereign target Codeberg Pages (DE). Burdens the Deployment view (Ch. 7) and G-1; migration expected trivial. | issue #10 (ADR-6 / R-11)
+| TD-7 | Screen-share routing rests on a fragile invariant (ADR-10): camera/mic carry the main stream and the reserved screen slot carries none, so an incoming track is sorted by `e.streams` presence; and the answerer must promote the offered slot to `sendrecv`. Give the screen sender a stream, or skip the promote, and the screen misroutes as a camera or a peer cannot share. Burdens *BB-3 Peer Connection*. Guarded by two #67 E2E tests and code comments. | ADR-10 / #67
 |===

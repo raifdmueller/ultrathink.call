@@ -17,6 +17,7 @@ option). Consequences name the Chapter 11 risks each decision creates.
 | ADR-7 | ES modules + dev-only test tooling (no app build) | Accepted (inferred)
 | ADR-8 | Mesh without a broker — host-relayed signaling | Accepted (owner)
 | ADR-9 | Background blur via the platform, not a vendored model | Accepted (owner)
+| ADR-10 | Screen share as a reserved second video transceiver, no renegotiation | Accepted (inferred — issue #67)
 |===
 
 === ADR-1 Server-less peer-to-peer, no own infrastructure
@@ -273,3 +274,46 @@ video-processing adapter behind the same port; if it is ever taken, #26
 (arc42 8.5) is adapted for the no-model case: we never present an unblurred frame
 as blurred — on any failure the toggle reverts and warns. Realized in
 `src/app/blur.js`.
+
+=== ADR-10 Screen share as a reserved second video transceiver, no renegotiation
+
+*Status*: Accepted (inferred — issue #67). *Context*: a participant wants to share
+their screen *while staying on camera* (#67). The old behaviour replaced the
+outgoing camera track with the screen, so peers lost the sharer's face. Sending a
+*second* video the obvious way — `addTrack` plus a fresh offer/answer — needs a
+signaling channel *after* the call is live, which the no-broker design (ADR-8)
+does not have: once media flows there is no path to carry a renegotiation without
+another out-of-band capability-URL exchange mid-call. *Decision*: reserve a second
+video transceiver per peer at bootstrap. The offerer adds it; the answerer adopts
+the offered slot and promotes it to `sendrecv` (a pre-added transceiver on the
+answerer does not associate with the offer's m-line and the slot would answer
+recvonly, blocking that peer from sharing). The screen is sent into the slot via
+`replaceTrack` — no new m-line, no renegotiation. A `share` `ctrl` message gates
+display; an incoming track is routed to camera vs. screen by msid presence (the
+screen slot is added with no stream, so its track arrives with empty `e.streams`).
+
+[cols="2,1,1,1",options="header"]
+|===
+| Criterion | Replace camera track (old) — datum | Renegotiate (addTrack + new offer) | Reserved 2nd transceiver
+| Camera and screen at once (#67) | 0 | +1 | +1
+| Works with no post-connect signaling (ADR-8) | 0 | -1 | +1
+| No idle resource cost | 0 | +1 | 0
+| Implementation simplicity | 0 | -1 | -1
+| *Sum* | *0* | *0* | *+1*
+|===
+
+Renegotiation ties the datum on sum but fails the decisive ADR-8 constraint —
+there is no live signaling path to carry a new offer/answer — so it is not viable,
+not merely lower-scored. The reserved slot is chosen.
+
+*Consequences*: screen and camera flow together, any peer can share, and no
+renegotiation is triggered (consistent with ADR-8). The cost: every peer carries
+one extra, idle video transceiver — negligible bandwidth (no media until a screen
+is shared) and one extra m-line in the capability-URL (well within `MAX_TOKEN`).
+The msid-presence routing and the answerer-promote step are a *fragile invariant*
+— the screen slot must never be given a stream, or its track would misroute as a
+camera — carried as *TD-7* (burdens BB-3) and guarded by E2E tests and code
+comments. One screen-receive slot per link means one concurrent remote share per
+link (the UI is last-sharer-wins); lifting that to true concurrent shares is
+deferred (enhancement #67-followup, issue #69). Realized in `src/app/peer.js`,
+`src/app/mesh.js`, `src/app/main.js`.

@@ -36,7 +36,11 @@ relays guest↔guest SDP, a *malicious host* could MITM guest↔guest media (R-7
 accepted because the host is the trusted meeting organizer (a peer round of known
 experts); guest↔guest media is only as trustworthy as the host. A malicious
 *remote peer* abusing ICE-candidate contents beyond the fingerprint check stays
-a documented residual.
+a documented residual. Likewise a screen share announced over `ctrl` (#67) only
+asserts *that* a peer is sharing — the screen track is sender-controlled video,
+not verifiable as a genuine screen capture (inherent to WebRTC). It is attributed
+to the channel it arrived on, so a peer cannot claim *another* peer is sharing,
+and it grants no trust beyond "this peer is showing me a video."
 
 === Security
 
